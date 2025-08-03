@@ -1174,13 +1174,12 @@ recovery_paths = {
 }
 
 def cut_system_message(system_message):
-    marker = "Specifically, you have access to the following APIs:"
+    marker = "You have access of the following tools:"
     index = system_message.find(marker)
     if index != -1:
         return system_message[index:]
     else:
         return system_message
-
 
 
 def extract_messages_from_gpt_output(raw: str):
@@ -1211,8 +1210,8 @@ def extract_messages_from_gpt_output(raw: str):
 
     return blocks
 
-def newtrainingthing(message):
-    message["value"]="xxx"
+def newtrainingthing(message,tools):
+    message["value"]="You are **Paladin**, an error-resilient agent that can use many functions (tools) to complete the task below.\n\nFirst I will present the task description, then your work begins.\n\nAt each step you must output **exactly** the following sections, in order:\nThought:\nAction:\nAction Input:\n\nAfter every function call you will receive the call result and enter a **new, irreversible state**.\nThen you must reason about the new state and decide what to do next.\n\nPaladin’s special skill → **Recovery**\n• If a function call returns an error (e.g. 404, 500, timeout, malformed JSON), you must analyse the failure, decide on a recovery strategy (retry, parameter fix, back-off, alternative tool, or graceful abort), and continue.\n• Each recovery step still follows the same Thought → Action → Action Input format.\n• If several different fixes are plausible, test them one at a time in separate steps.\n• Keep each Thought short (≤ 5 sentences).\n\nTask completion\n• When the task goal has been achieved, call **Finish** with a user-facing answer.\n• If you determine the task cannot be completed (all recovery options exhausted or tool unavailable), call **Finish** with `give_up_and_restart`.\n\nRemember\n1. **State is immutable** – you cannot return to a previous state; to start over use `give_up_and_restart`.\n2. Always use only the function names provided in the tool list (no original wrapper names).\n3. You may try multiple recovery attempts, but be concise and avoid endless loops.\n4. ALWAYS end with a single **Finish** function call.\n\nLet’s begin!\n\nTask description: \nYou should use the available functions to handle real-time user queries.\n\nGuidelines:\n1. ALWAYS call the \"Finish\" function at the end of the task. The final answer must contain enough information for the user. If you cannot complete the task, or every recovery attempt fails, call **Finish** with `give_up_and_restart`.\n2. Use only the sub-function names supplied in the tool list. Do **not** invoke wrapper/original tool names.\n3. Keep each Thought concise (≤ 5 sentences) and ensure every Thought directly motivates the following Action.\n4. If an error occurs, apply Paladin recovery rules before considering `give_up_and_restart`.\n" + tools
     return message
 
 
@@ -1894,7 +1893,7 @@ def augment_to_make_better(example):
     
     for i, msg in enumerate(convo):
         if msg.get("from")=="system":
-            convo_aug.append(newtrainingthing(msg))
+            convo_aug.append(newtrainingthing(msg,tools_info))
             print("Hallelujah") 
             break
 
@@ -1949,7 +1948,7 @@ def augment_with_failure(example, failure_type,failure_index):
     #Basically copying everything befor the failure into convo_aug and the tool call before the error into prev_msg
     for i, msg in enumerate(convo):
         if msg.get("from")=="system":
-            convo_aug.append(newtrainingthing(msg))
+            convo_aug.append(newtrainingthing(msg,tools_info))
             print("Hallelujah") 
             continue
         convo_aug.append(msg)
@@ -1982,8 +1981,6 @@ def augment_with_failure(example, failure_type,failure_index):
     #convo_aug_err = convo_aug[:func_call_idx] WAS LOWKEY useless so I commented it
 
     #error_payload = {"error": f"{failure_type} {recovery_paths[failure_type]}", "response": None}
-
-    convo_aug.append({"from": "function", "value": json.dumps(failure_type)})
 
     recovery_msg = generate_recovery(
         prevthought,

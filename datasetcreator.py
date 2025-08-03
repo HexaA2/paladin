@@ -6,7 +6,7 @@ import random
 import re
 
 # === CONFIG === #
-openai.api_key = "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"
+openai.api_key = "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"
 
 
 recovery_paths = {
@@ -45,7 +45,7 @@ recovery_paths = {
     },
     {
       "from": "Assistant",
-      "value": "Thoughts: If I’ve ruled out all formatting issues and unnecessary data, perhaps the server expects a specific field format or special value that's not obvious in documentation.\n Action: Re-read official API documentation to verify required value formats (e.g., date format, string casing), hidden required fields, and example requests. Test with minimal, known-good sample data if available."
+      "value": "Thoughts: If I've ruled out all formatting issues and unnecessary data, perhaps the server expects a specific field format or special value that's not obvious in documentation.\n Action: Re-read official API documentation to verify required value formats (e.g., date format, string casing), hidden required fields, and example requests. Test with minimal, known-good sample data if available."
     },
     {
       "from": "function",
@@ -213,7 +213,7 @@ recovery_paths = {
   "429": [
     {
       "from": "Assistant",
-      "value": "Thoughts: 429 Too Many Requests means I've hit the server’s rate limit for this resource or API key.\n Action: Honor any Retry-After timeout in the response, and if it's missing, apply a backoff delay before trying again."
+      "value": "Thoughts: 429 Too Many Requests means I've hit the server's rate limit for this resource or API key.\n Action: Honor any Retry-After timeout in the response, and if it's missing, apply a backoff delay before trying again."
     },
     {
       "from": "function",
@@ -249,7 +249,7 @@ recovery_paths = {
 "JSON Schema Violation": [
     {
       "from": "Assistant",
-      "value": "Thoughts: I received a JSON Schema Violation which means the data returned or sent doesn’t match the expected format or types.\n Action: Validate the offending JSON against the documented schema, identify which key or field is wrong, and try to coerce or correct invalid values before retrying the call."
+      "value": "Thoughts: I received a JSON Schema Violation which means the data returned or sent doesn't match the expected format or types.\n Action: Validate the offending JSON against the documented schema, identify which key or field is wrong, and try to coerce or correct invalid values before retrying the call."
     },
     {
       "from": "function",
@@ -295,7 +295,7 @@ recovery_paths = {
   "411": [
     {
       "from": "Assistant",
-      "value": "Thoughts: 411 Length Required means the server needs to know the size of my payload but it was missing from my request.\n Action: Add an appropriate Content-Length header indicating the request’s payload size and retry the request."
+      "value": "Thoughts: 411 Length Required means the server needs to know the size of my payload but it was missing from my request.\n Action: Add an appropriate Content-Length header indicating the request's payload size and retry the request."
     },
     {
       "from": "function",
@@ -305,7 +305,7 @@ recovery_paths = {
   "412": [
     {
       "from": "Assistant",
-      "value": "Thoughts: 412 Precondition Failed means the request had an If-* header or precondition that wasn’t satisfied (e.g., ETag mismatch).\n Action: Fetch the latest state or version, adjust my preconditions, and try again only if they now match."
+      "value": "Thoughts: 412 Precondition Failed means the request had an If-* header or precondition that wasn't satisfied (e.g., ETag mismatch).\n Action: Fetch the latest state or version, adjust my preconditions, and try again only if they now match."
     },
     {
       "from": "function",
@@ -315,7 +315,7 @@ recovery_paths = {
   "413": [
     {
       "from": "Assistant",
-      "value": "Thoughts: 413 Payload Too Large means my data upload exceeds the server’s limit.\n Action: Reduce payload size (compress, split, or chunk the data) and resend the request. If needed, request server for higher limits."
+      "value": "Thoughts: 413 Payload Too Large means my data upload exceeds the server's limit.\n Action: Reduce payload size (compress, split, or chunk the data) and resend the request. If needed, request server for higher limits."
     },
     {
       "from": "function",
@@ -345,7 +345,7 @@ recovery_paths = {
   "416": [
     {
       "from": "Assistant",
-      "value": "Thoughts: 416 Range Not Satisfiable means the byte-range I requested is outside the resource’s available range (e.g., file ends at byte 1000, requested 1001-2000).\n Action: Adjust or remove the Range header to request valid or all available data, then resend."
+      "value": "Thoughts: 416 Range Not Satisfiable means the byte-range I requested is outside the resource's available range (e.g., file ends at byte 1000, requested 1001-2000).\n Action: Adjust or remove the Range header to request valid or all available data, then resend."
     },
     {
       "from": "function",
@@ -1202,7 +1202,9 @@ def extract_messages_from_gpt_output(raw: str):
         elif line.startswith('"value":'):
             value = line.split(":", 1)[1].strip().strip('"')
             # fix escaped quotes, newlines
-            value = bytes(value, "utf-8").decode("unicode_escape")
+            if value.endswith("\\"):
+              value = value[:-1]
+            value = bytes(value, "utf-8").decode("unicode_escape", errors="replace")
             current["value"] = value
 
     # append last block if complete
@@ -1216,8 +1218,8 @@ def newtrainingthing(message):
     return message
 
 
-def generate_recovery(Last_thought, Last_decided_action, Last_inpure, failure_type, task_description=None, tools_info=None, recent_conversation=None):
-    
+def generate_recovery(Last_thought, Last_decided_action, Last_inpure, actual_errormsg, failure_type, task_description=None, tools_info=None, recent_conversation=None):
+    from openai import OpenAIError, RateLimitError
     # Create input data from the parameters
     input_data = {
         "thought": Last_thought,
@@ -1231,107 +1233,504 @@ def generate_recovery(Last_thought, Last_decided_action, Last_inpure, failure_ty
     tools_context = f"Available Tools:\n{tools_info}" if tools_info else ""
     conversation_context = f"Recent Conversation:\n{recent_conversation}" if recent_conversation else ""
 
-    prompt = f"""
-You are a recovery assistant for LLM agents using tools/APIs in a multi-step workflow. In this situation you will encounter a situation where a tool call has failed and will be directed to solve it. 
+    # Convert recovery_paths to a string representation to avoid f-string nesting issues
+    recovery_paths_str = str(recovery_paths)
+    
+    # Build the prompt in parts to avoid deep f-string nesting
+    prompt_parts = []
+    
+    # Part 1: Introduction and task description
+    prompt_parts.append("""You are a recovery assistant for LLM agents using tools/APIs in a multi-step workflow.
+Your job is to respond to tool call failures with a structured recovery plan and follow it until the task is completed or declared unsolvable.
 
-Make sure to label each step as "Recovery: " and then start initiating recovery actions in this format:
+---
 
-Thought: Briefly explain the failure and intended recovery strategy in 1-2 sentences.
-Action: The function to retry + the chnages you implemented or an alternate fallback tool.
-Action Input: Valid JSON input for the action.
-
-For recovery follow the recovery protocols for the given error ({failure_type}) in {recovery_paths}. These recovery protocols are very generalized so use them as a basis as you fix the very specific problem that is occuring for each specific situation.
-In the event of the error "unknown" look through {recovery_paths} and determine what the error most likley is and initiate the recovery protocols for said error.
-
-
-An example of a recovery output may look like this:
-(Disclaimer: When generating a recovery step, use realistic and plausible values for all tool parameters. Do not use placeholders like (example VIN) or (expected output). If exact values are unknown, infer likely values using context and general knowledge. When providing the expected function output, return a complete and specific JSON object with values consistent with what the tool would return in a real-world case.)
-
-"from": "assistant"
-"value": "Recovery: Thoughts: (fill with relevant thoughts) \n Action: (fill with relevant action) \n Action Input: (fill with relevant json input)  Which You fill out based on the given context.",
-
-After creating this format you will then create an expected output from the function in the form of a JSON output.
-
-An example of a succesful function output may look like this:
-
-
-"from": "function",
-"value": "(the succesful JSON output)",
-
-
-Finally you will send another message upon succesfully correcting the error providing the user with the information that they needed. In this output ALWAYS include "Finish" in the action part.  This output will also use the Thought, Action, Action Input format:
-
-An example of a final output may look like this (MAKE SURE TO ALWAYS HAVE A FINAL OUTPUT):
-
-"from": "assistant",
-"value": "Thoughts: (Provide User with information here) \n Action: Finish \n Action Input:",
-
-ALWAYS follow the eample formats for every correction
-
-In the case that a correction may take multiple back and forths between the system use this format.
-
-"from": "assistant"
-"value": "Recovery: Thoughts: (fill with relevant info) \n Action: (fill with relevant info) \n Action Input: (fill with relevant info)  Which You fill out based on the given context.",
-
-"from": "function",
-"value": "(the expected JSON output)",
-
-"from": "assistant"
-"value": "Recovery: Thoughts: (fill with relevant info) \n Action: (fill with relevant info) \n Action Input: (fill with relevant info)  Which You fill out based on the given context.",
-
-Do this until you get the succesful function output and finish with a final output.
-
-In the event that you find an error to be unsolvable end it of with a unable to solve output:
-
-"from":"assistance"
-"value": "Unable to solve"
-
-Use only the information below for context. Do not add unrelated content.
-
-This is the task context: {task_context}
-
-These are the tools you have on hand for the given task and their parameteres and how they work: {tools_context}
-Make sure your actions follow the guidelines for the tools here.
-
-This is all the previous messages building up to the error: {conversation_context}
-
-This is the information regarding the most recent action by the LLM agent which caused the error:
-
+## Recovery Task
+You will be given:""")
+    
+    # Part 2: Context information
+    prompt_parts.append(f"""- The failure type and general recovery protocols: {failure_type} in {recovery_paths_str}
+- Task context: {task_context}
+- Tool descriptions: {tools_context}
+- Recent conversation history: {conversation_context}
+- The most recent thought, action, and action input that caused the error:
     Most recent thought: {Last_thought}
     Most recent action: {Last_decided_action}
-    Most recent input: {Last_inpure}
+    Most recent input: {Last_inpure}""")
+    
+    # Part 3: Job description
+    prompt_parts.append(f"""Your job is to:
+1. Analyze the failure.
+2. Follow the appropriate recovery protocol for the given error.
+3. If the error type is `"unknown"`, first inspect {actual_errormsg} to see if the error is truly unknown. If it is not refer to recovery protocols and solve for error seen in {actual_errormsg}.  If it is blank refer to the same place and determine the most likely cause, then recover accordingly.
+4. Continue the recovery process until either:
+   - The task is completed successfully, or
+   - You determine recovery is impossible and output an `"Unable to solve"` message.
 
-ALWAYS DO THESE THINGS DO NOT SKIP ANY OF THEM:
-Ensure all Action Input and function outputs are complete JSON. Do not end responses mid-key or mid-string. Always finish closing braces, brackets, and quotes.
-Make sure you ALWAYS finish a task.  Dont just end with a few calls.  If a task is unsolvable then end it of with an unable to solve output and explain why it is unsolvable.
-"""
+---
 
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a precise and efficient LLM recovery agent."},
-                {"role": "user", "content": prompt.strip()}
-            ],
-            temperature=0.2,
-            max_tokens=200
-        )
-        result = response.choices[0].message.content.strip()
-        if not result:
-            print("[WARN] Empty response from OpenAI API")
-            return "Thought: API returned empty response.\nAction: Finish\nAction Input: {\"return_type\": \"give_up_and_restart\"}"
-        return result
-    except openai.error.OpenAIError as e:
-        print(f"[OpenAI API Error] {e}")
-        return "Thought: API call failed.\nAction: Finish\nAction Input: {\"return_type\": \"give_up_and_restart\"}"
-    except Exception as e:
-        print(f"[Unexpected Error in generate_recovery] {e}")
-        return "Thought: Unexpected error occurred.\nAction: Finish\nAction Input: {\"return_type\": \"give_up_and_restart\"}"
+## Workflow Rules
+- Every **recovery attempt** must have a Thought, Action, and Action Input.
+- Use realistic, plausible, and valid JSON for all Action Inputs and function outputs. Do not use placeholders like `(example VIN)` or `(expected output)`.
+- You may retry multiple times if needed.
+- Once recovery succeeds, send a **final assistant message** that includes `"Finish"` as the Action.
+- If the issue is truly unsolvable, send an `"Unable to solve"` message explaining why.
+
+---
+
+## Output Examples
+
+### Example 1 — Single Recovery Then Success
+"from": "assistant",
+"value": "Recovery: Thought: The API call failed due to a timeout. I will retry with a smaller dataset to speed up the response.\\nAction: get_data\\nAction Input: {{\"dataset_id\": 42, \"limit\": 100}}",
+
+"from": "function",
+"value": "{{\"data\": [ ... ]}}",
+
+"from": "assistant",
+"value": "Thought: I have retrieved the required data successfully.\\nAction: Finish\\nAction Input: {{}}",
+
+---
+
+### Example 2 — Multiple Recovery Attempts
+"from": "assistant",
+"value": "Recovery: Thought: The request failed with a 404 Not Found. I will adjust the endpoint to use the correct resource ID.\\nAction: fetch_user\\nAction Input: {{\"user_id\": 12345}}",
+
+"from": "function",
+"value": "{{\"error\": \"User not found\"}}",
+
+"from": "assistant",
+"value": "Recovery: Thought: The ID still appears invalid. I will search for the correct ID using the username.\\nAction: find_user_by_name\\nAction Input: {{\"username\": \"johndoe\"}}",
+
+"from": "function",
+"value": "{{\"user_id\": 67890}}",
+
+"from": "assistant",
+"value": "Recovery: Thought: Now that I have the correct ID, I will retry the fetch.\\nAction: fetch_user\\nAction Input: {{\"user_id\": 67890}}",
+
+"from": "function",
+"value": "{{\"name\": \"John Doe\", \"email\": \"john@example.com\"}}",
+
+"from": "assistant",
+"value": "Thought: I have retrieved the user details successfully.\\nAction: Finish\\nAction Input: {{}}",
+
+---
+
+### Example 3 — Unsolvable
+"from": "assistant",
+"value": "Recovery: Thought: The API endpoint has been deprecated and no alternative is available.\\nAction: none\\nAction Input: {{}}",
+
+"from": "assistant",
+"value": "Unable to solve: No valid recovery action exists for this tool in the current environment."
+
+---
+
+## Few-Shot Recovery Demonstrations""")
+    
+    # Part 4: Few-shot examples (these contain the most complex nested JSON)
+    few_shot_examples = """
+
+---
+### Few-Shot Example 1 — Multiple Recovery Attempts Then Unable to Solve 
+
+# Step 1: Initial recovery attempt after first failure. 
+# Reason: The first API call returned an error suggesting a possible formatting issue with the username. 
+# Action: Retry after trimming whitespace and converting to lowercase, as some APIs are case/whitespace sensitive.
+"from": "assistant",
+"value": "Recovery: Thought: The initial API call to retrieve Instagram user info for 'nike' failed, likely with a 400 Bad Request. I will trim whitespace, ensure the username is lowercase, and confirm the endpoint is correct.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"nike\"}}",
+
+# Step 1 result: API still rejects the request with an error about the username parameter. 
+# This indicates trimming/lowercasing did not fix the problem.
+"from": "function",
+"value": "{{\"error\": {{\"code\": 400, \"message\": \"Bad Request: Invalid or missing username parameter.\", \"details\": \"Username parameter did not match any user in our records.\"}}}},",
+
+# Step 2: Second recovery attempt. 
+# Reason: The username looks correct, so the failure may be due to missing headers required by the API.
+# Action: Include 'Content-Type: application/json' header to ensure proper request format.
+"from": "assistant",
+"value": "Recovery: Thought: The username parameter appears valid based on the schema. The issue may be missing required headers. I will include a Content-Type header set to 'application/json'.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"nike\", \"headers\": {{\"Content-Type\": \"application/json\"}}}}",
+
+# Step 2 result: Error persists. This suggests that headers alone are not the cause, 
+# though the API hints that additional request headers or authentication may be needed.
+"from": "function",
+"value": "{{\"error\": {{\"code\": 400, \"message\": \"Bad Request: Invalid or missing username parameter.\", \"details\": \"API requires additional request headers or authentication.\"}}}}",
+
+# Step 3: Third recovery attempt. 
+# Reason: The request structure and headers appear correct. The error could be caused by unexpected or extra fields in the payload.
+# Action: Send a minimal JSON payload with only the required 'username' field.
+"from": "assistant",
+"value": "Recovery: Thought: The request structure and headers are correct. I will send a minimal, well-formed JSON payload with only the username field.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"nike\"}}",
+
+# Step 3 result: Error remains, indicating the issue is likely specific to the username or a hidden requirement for this endpoint.
+"from": "function",
+"value": "{{\"error\": {{\"code\": 400, \"message\": \"Bad Request: Invalid or missing username parameter.\", \"details\": \"Username format not accepted by this endpoint.\"}}}}",
+
+# Step 4: Fourth recovery attempt. 
+# Reason: To confirm whether the API itself is working or if the issue is specific to 'nike', test with a known-good username.
+# Action: Use 'instagram' as a control test case.
+"from": "assistant",
+"value": "Recovery: Thought: All structural checks have failed. I will test with a known-good username 'instagram' to verify the endpoint.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"instagram\"}}",
+
+# Step 4 result: Successful retrieval proves the API is functional, and the issue is limited to 'nike'.
+"from": "function",
+"value": "{{\"data\": {{\"user_id\": \"25025320\", \"username\": \"instagram\", \"full_name\": \"Instagram\", \"bio\": \"Discovering — and telling — stories from around the world. Curated by Instagram's community team.\", \"profile_pic_url\": \"https://instagram.com/profile_pic.jpg\", \"followers\": 500000000, \"following\": 200, \"is_verified\": true}}}}",
+
+# Step 5: Conclusion. 
+# Reason: The API works for 'instagram' but not for 'nike', indicating 'nike' may be restricted, private, or inaccessible via this API.
+# Action: End with a Finish step, informing the user that the task cannot be completed for 'nike' but the API is working.
+"from": "assistant",
+"value": "The API works with the username 'instagram', so the endpoint is functional. The repeated 400 errors for 'nike' suggest that either the username 'nike' is not available via this API, is restricted, or the API has a limitation on certain high-profile accounts. Since all recovery steps have been exhausted, I will escalate and inform the user that data for 'nike' cannot be retrieved at this time, but the API works for other usernames like 'instagram'.\\nAction: Finish\\nAction Input:{{\"status\": \"failed\", \"reason\": \"Unable to retrieve data for 'nike' after multiple recovery attempts\", \"next_step\": \"Contact API provider or try a different username\"}}"
+
+---
+
+---
+### Few Shot Example 2 — Incorrect Input Scope Fixed by State-Level Tool Usage
+
+// Reason: User asked for half-staff events in New York and current flag status in West Virginia.
+// Action: First attempt uses 'US' code to try to get half-staff info, assuming it covers NY.
+"from": "assistant",
+"value": "Thought: The user wants to know half-staff events in New York and the current flag status in West Virginia. I will start by querying US-wide half-staff events.\\nAction: get_half_staff_events_for_given_flag_for_flag_status\\nAction Input: {{\"code\": \"US\"}}",
+
+// Result: Function runs, returns full JSON of US event info — valid but possibly not NY-specific.
+"from": "function",
+"value": {{\"error\": \"\", \"response\": \"[{{\'flag\': \'US\', \'issued_by\': \'President\', \'date_issued\': \'2023-01-21\', \'date_start\': \'2023-01-22\', \'date_end\': \'2023-01-26\', \'title\': \'As a mark of respect...\', \'description\': \'...\']\"}},
+
+// Result: Function system unexpectedly returns "unknown" (maybe internal error or fallback)
+"from": "function",
+"value": "\"unknown\"",
+
+// Reason: Recovery triggered due to malformed or overly broad input.
+// Action: Adjust tool input to use correct state-level code ('NY' instead of 'US').
+"from": "assistant",
+"value": "Recovery: Thought: The request failed because I used 'US' instead of the correct state code 'NY'. I will correct the flag code to 'NY' and retry.\\nAction: get_half_staff_events_for_given_flag_for_flag_status\\nAction Input: {{\"code\": \"NY\"}}",
+
+// Result: Recovery successful — gets the correct NY state events.
+"from": "function",
+"value": {{\"data\": [{{\"event_id\": \"20240601NY\", \"start_date\": \"2024-06-01\", \"end_date\": \"2024-06-02\", \"reason\": \"In honor of Memorial Day\", \"location\": \"Statewide\"}}, {{\"event_id\": \"20240615NY\", \"start_date\": \"2024-06-15\", \"end_date\": \"2024-06-15\", \"reason\": \"In memory of fallen officers\", \"location\": \"Statewide\"}}] }},
+
+// Reason: Next, fulfill second part of user query — WV flag status.
+// Action: Query tool with state code 'WV'.
+"from": "assistant",
+"value": "Recovery: Thought: I have successfully retrieved half-staff events for NY. Now I will get the current flag status for West Virginia using code 'WV'.\\nAction: get_half_staff_events_for_given_flag_for_flag_status\\nAction Input: {{\"code\": \"WV\"}}",
+
+// Result: WV status successfully retrieved.
+"from": "function",
+"value": {{\"status\": \"full-staff\", \"last_changed\": \"2024-05-20T08:00:00Z\", \"location\": \"West Virginia\"}},
+
+// Reason: All sub-tasks complete — proceed to final assistant wrap-up.
+// Action: Provide user with event data and WV status summary.
+"from": "assistant",
+"value": "Thought: I have all the information. There are two half-staff events in NY, and the flag in WV is currently at full-staff.\\nAction: Finish\\nAction Input: {{\"half_staff_events\": [\"June 1–2, 2024: In honor of Memorial Day\", \"June 15, 2024: In memory of fallen officers\"], \"flag_status_WV\": \"full-staff as of May 20, 2024\"}}"
+
+---
+
+---
+
+### Few Shot Example 3 -  Timeout Recovery with Billboard Tool Switch & Multi-Tool Completion (still idetified error despite false unknown)
+// Reason: User asked for top 10 alternative songs and SoundCloud data related to "Almost Lover".
+// Action: Attempt to retrieve chart data using Greece endpoint with 'all-time' range.
+"from": "user",
+"value": "\\nHelp me discover new music from different genres. Provide the top 10 alternative songs of all time. Also, search for tracks related to the song 'Almost Lover' and give me the basic information and comments for a specific song on Soundcloud.\\nBegin!\\n",
+
+"from": "assistant",
+"value": "Thought: The user asked for the top 10 alternative songs and SoundCloud details for 'Almost Lover'. I will start by calling the Greece Billboard API using range 'all-time'.\\nAction: greece_songs_for_billboard_api\\nAction Input: {{\"range\": \"all-time\", \"date\": \"2021-08-01\"}}",
+
+// Result: Function call fails with a timeout.
+"from": "function",
+"value": "{{\"error\": \"Timeout error...HTTPConnectionPool(host='47.251.13.204', port=8080): Read timed out. (read timeout=10)\\", \"response\": \"\"}}",
+
+// Result: System returns 'unknown' placeholder.
+"from": "function",
+"value": "\"unknown\"",
+
+// Reason: Recovery triggered due to timeout failure (408).
+// Action: Retry same call with longer timeout window.
+"from": "assistant",
+"value": "Recovery: Thought: The API call failed due to a timeout, which suggests a network delay or server overload. I will retry the request with an increased timeout to allow more time for the server to respond.\\nAction: greece_songs_for_billboard_api\\nAction Input: {{\"range\": \"all-time\", \"date\": \"2021-08-01\", \"timeout\": 20}}",
+
+// Result: Second timeout failure.
+"from": "function",
+"value": "{{\"error\": \"Timeout error...HTTPConnectionPool(host='47.251.13.204', port=8080): Read timed out. (read timeout=20)\\", \"response\": \"\"}}",
+
+// Reason: Persistent timeout suggests endpoint is unstable or blocked.
+// Action: Switch to a more reliable alternative-specific Billboard API.
+"from": "assistant",
+"value": "Recovery: Thought: The increased timeout did not resolve the issue, indicating a persistent network or server problem. I will attempt to access the alternative songs using the 'alternative_songs_for_billboard_api' function, which may provide the required information without the need for a specific date.\\nAction: alternative_songs_for_billboard_api\\nAction Input: {{}}",
+
+// Result: Alternative songs successfully retrieved.
+"from": "function",
+"value": "{{\"data\": [{{\"rank\": 1, \"title\": \"Smells Like Teen Spirit\", \"artist\": \"Nirvana\"}}, {{\"rank\": 2, \"title\": \"Under the Bridge\", \"artist\": \"Red Hot Chili Peppers\"}}, {{\"rank\": 3, \"title\": \"Creep\", \"artist\": \"Radiohead\"}}, {{\"rank\": 4, \"title\": \"Losing My Religion\", \"artist\": \"R.E.M.\"}}, {{\"rank\": 5, \"title\": \"Wonderwall\", \"artist\": \"Oasis\"}}, {{\"rank\": 6, \"title\": \"Black Hole Sun\", \"artist\": \"Soundgarden\"}}, {{\"rank\": 7, \"title\": \"Jeremy\", \"artist\": \"Pearl Jam\"}}, {{\"rank\": 8, \"title\": \"Come As You Are\", \"artist\": \"Nirvana\"}}, {{\"rank\": 9, \"title\": \"Zombie\", \"artist\": \"The Cranberries\"}}, {{\"rank\": 10, \"title\": \"Basket Case\", \"artist\": \"Green Day\"}}]}}",
+
+// Reason: Billboard task is now complete.
+// Action: Proceed to search for 'Almost Lover' on SoundCloud.
+"from": "assistant",
+"value": "Recovery: Thought: I have successfully retrieved the top 10 alternative songs of all time. Now, I will proceed to search for tracks related to 'Almost Lover' on Soundcloud.\\nAction: search_for_soundcloud\\nAction Input: {{\"type\": \"track\", \"query\": \"Almost Lover\"}}",
+
+// Result: SoundCloud tracks returned.
+"from": "function",
+"value": "{{\"tracks\": [{{\"title\": \"Almost Lover\", \"artist\": \"A Fine Frenzy\", \"url\": \"https://soundcloud.com/afinefrenzy/almost-lover\"}}, {{\"title\": \"Almost Lover (Cover)\", \"artist\": \"John Doe\", \"url\": \"https://soundcloud.com/johndoe/almost-lover-cover\"}}]}}",
+
+// Reason: Need to get more details for the original 'Almost Lover' track.
+// Action: Query SoundCloud for track info and comments.
+"from": "assistant",
+"value": "Recovery: Thought: I have found tracks related to 'Almost Lover'. I will now retrieve basic information and comments for the specific song by A Fine Frenzy.\\nAction: song_info_for_soundcloud\\nAction Input: {{\"track_url\": \"https://soundcloud.com/afinefrenzy/almost-lover\"}}",
+
+// Result: Song info and user comments successfully retrieved.
+"from": "function",
+"value": "{{\"title\": \"Almost Lover\", \"artist\": \"A Fine Frenzy\", \"comments\": [{{\"user\": \"musicfan123\", \"comment\": \"This song always makes me emotional.\"}}, {{\"user\": \"loverofmusic\", \"comment\": \"Beautiful lyrics and melody.\"}}]}}",
+
+// Reason: All subtasks complete.
+// Action: Summarize song results and end task.
+"from": "assistant",
+"value": "Thought: I have gathered all the necessary information. Here are the top 10 alternative songs and the SoundCloud info for 'Almost Lover'. Let me know if you'd like more recommendations! \\nAction: Finish\\nAction Input: {{\"status\": \"complete\", \"top_alternative_songs_count\": 10, \"soundcloud_track\": \"Almost Lover by A Fine Frenzy\"}}"
+
+---
+
+---
+
+###Few Shot Example 4 - [Bad Schema] YouTube Playlist Creation Recovery
+
+# Reason: User asked to search YouTube for movie trailers, build a playlist, and retrieve its details.
+# Action: Assistant initiates search using YouTube v3 search API.
+"from": "user",
+"value": "\\nI'm planning a movie night and would like to create a playlist of YouTube videos. Search for 'movie trailers' on YouTube and retrieve the search results, including snippets and IDs. Then, fetch the videos from the search results and add them to a playlist. Provide the playlist details, including the snippets.\\nBegin!\\n",
+
+"from": "assistant",
+"value": "Thought: I will begin by searching for 'movie trailers' using the YouTube search API.\\nAction: search_for_youtube_v3_v2\\nAction Input: {{\"part\": \"snippet\", \"q\": \"movie trailers\", \"maxresults\": 10}}",
+
+# Result: Video search successful.
+"from": "function",
+"value": {{\"error\": \"\", \"response\": \"{{\\\"items\\\": [{{\\\"id\\\": {{\\\"videoId\\\": \\\\\"bSD8a_Ptkds\\\\"}}}}, {{\\\"id\\\": {{\\\"videoId\\\": \\\\\"anotherVideoId1\\\\"}}}}, {{\\\"id\\\": {{\\\"videoId\\\": \\\\\"anotherVideoId2\\\\"}}}}]}}\"}},
+
+# Reason: Assistant attempts to get playlist details prematurely, with a malformed schema.
+# Action: Makes an invalid call missing required filter field like `id`, `mine`, or `channelId`.
+"from": "assistant",
+"value": "Thought: I have the search results. I will now try to get playlist details.\\nAction: playlist_details_for_youtube_v3_v2\\nAction Input: {{\"is_id\": \"\", \"part\": \"snippet\"}}",
+
+# Result: Tool fails due to missing required parameter (bad schema).
+"from": "function",
+"value": {{\"error\": \"Message error...\", \"response\": \"{{\\\"error\\\": {{\\\"code\\\": 400, \\\\\"message\\\": \\\\\"No filter selected. Expected one of: channelId, mine, id\\\\"}}}}\"}},
+
+# Result: Tool reports HTTP 400 error.
+"from": "function",
+"value": "\\"400\\"",
+
+# Reason: Assistant recognizes bad schema input.
+# Action: Creates a new playlist to obtain valid ID.
+"from": "assistant",
+"value": "Recovery: Thought: The error occurred because I failed to specify a required identifier. I will create a playlist to obtain a valid playlist ID.\\nAction: create_playlist_for_youtube_v3_v2\\nAction Input: {{\"title\": \"Movie Trailers Playlist\", \"description\": \"A playlist of movie trailers for movie night.\", \"privacyStatus\": \"public\"}}",
+
+# Result: Playlist created successfully.
+"from": "function",
+"value": {{\"playlistId\": \"PL1234567890abcdef\"}},
+
+# Reason: Assistant can now proceed with video upload.
+# Action: Adds previously retrieved videos to the new playlist.
+"from": "assistant",
+"value": "Recovery: Thought: I now have a playlist ID. I will add the videos to this playlist.\\nAction: add_videos_to_playlist_for_youtube_v3_v2\\nAction Input: {{\"playlistId\": \"PL1234567890abcdef\", \"videoIds\": [\"bSD8a_Ptkds\", \"anotherVideoId1\", \"anotherVideoId2\"]}}",
+
+# Result: Videos added successfully.
+"from": "function",
+"value": {{\"status\": \"success\", \"message\": \"Videos added to playlist successfully.\"}},
+
+# Reason: Ready to retry failed playlist details call with valid ID.
+# Action: Fetch playlist details for user.
+"from": "assistant",
+"value": "Recovery: Thought: The videos have been added. Now I will retrieve the playlist details using the valid playlist ID.\\nAction: playlist_details_for_youtube_v3_v2\\nAction Input: {{\"is_id\": \"PL1234567890abcdef\", \"part\": \"snippet\"}}",
+
+# Result: Playlist info returned successfully.
+"from": "function",
+"value": {{\"items\": [{{\"snippet\": {{\"title\": \"Movie Trailers Playlist\", \"description\": \"A playlist of movie trailers for movie night.\", \"thumbnails\": {{\"default\": {{\"url\": \"https://example.com/thumbnail.jpg\"}}}}}}}}]}},
+
+# Reason: All subtasks are complete.
+# Action: Assistant summarizes and finishes.
+"from": "assistant",
+"value": "Thought: I have successfully created the playlist and retrieved its details.\\nAction: Finish\\nAction Input: {{\"return_type\": \"give_answer\", \"final_answer\": \"The playlist 'Movie Trailers Playlist' has been created and populated with movie trailers. You can view it with the following details: Title: Movie Trailers Playlist, Description: A playlist of movie trailers for movie night, Thumbnail: https://example.com/thumbnail.jpg.\"}}"
+
+---
+
+--- 
+### Few Shot Example 5 - auth/header recovery pattern
+// Reason: User asked for geocoordinates of NYC landmarks and nearby hotels.
+// Action: Assistant initiates call to geocode Times Square using OpenCage API.
+"from": "user",
+"value": "\\nI'm a travel blogger and I'm planning to write an article about the top tourist attractions in New York City. Can you provide me with the geocoordinates for Times Square, Central Park, and the Statue of Liberty? Also, recommend some nearby hotels for tourists.\\nBegin!\\n",
+
+// Reason: Begin with first location — Times Square.
+// Action: Call geocode tool with new API key.
+"from": "assistant",
+"value": "Thought: I will begin by retrieving the coordinates for Times Square using OpenCage geocoder.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Times Square, New York City\", \"key\": \"new-opencage-api-key\"}}",
+
+// Reason: API call failed — unauthorized.
+// Action: Return error response indicating invalid API key.
+"from": "function",
+"value": {{\"error\": \"\", \"response\": \"{'status': {'code': 401, 'message': 'invalid API key'}, 'results': []}\"}},
+
+// Reason: Internal system surfaced error code 401.
+// Action: Return system-recognized HTTP code.
+"from": "function",
+"value": "\\"401\\"",
+
+// Reason: Recovery triggered due to 401 Unauthorized.
+// Action: Retry with a corrected API key.
+"from": "assistant",
+"value": "Recovery: Thought: The 401 Unauthorized error suggests the API key is invalid. I will retry with a corrected OpenCage API key.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Times Square, New York City\", \"key\": \"corrected-opencage-api-key\"}}",
+
+// Reason: Correct API key used — request succeeds.
+// Action: Return Times Square coordinates.
+"from": "function",
+"value": {{\"response\": \"{'results': [{'geometry': {'lat': 40.758, 'lng': -73.9855}}], 'status': {'code': 200}}\"}},
+
+// Reason: Proceed to fetch Central Park coordinates.
+// Action: Make request for Central Park using same valid API key.
+"from": "assistant",
+"value": "Recovery: Thought: Successfully retrieved Times Square coordinates. Now fetching coordinates for Central Park.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Central Park, New York City\", \"key\": \"corrected-opencage-api-key\"}}",
+
+// Reason: Valid key used — Central Park coordinates retrieved.
+// Action: Return success response.
+"from": "function",
+"value": {{\"response\": \"{'results': [{'geometry': {'lat': 40.785091, 'lng': -73.968285}}], 'status': {'code': 200}}\"}},
+
+// Reason: Proceed to third landmark — Statue of Liberty.
+// Action: Request geocoordinates for Statue of Liberty.
+"from": "assistant",
+"value": "Recovery: Thought: Central Park coordinates retrieved. Proceeding with Statue of Liberty.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Statue of Liberty, New York City\", \"key\": \"corrected-opencage-api-key\"}}",
+
+// Reason: Final location processed — all geocoordinates collected.
+// Action: Return Statue of Liberty data.
+"from": "function",
+"value": {{\"response\": \"{'results': [{'geometry': {'lat': 40.689247, 'lng': -74.044502}}], 'status': {'code': 200}}\"}},
+
+// Reason: Now transition to hotel search using retrieved coordinates.
+// Action: Call hotel search tool using Times Square location.
+"from": "assistant",
+"value": "Thought: I have all the coordinates. Next, I will search for hotels near Times Square.\\nAction: search_places_for_spott\\nAction Input: {{\"query\": \"hotels\", \"location\": \"40.758,-73.9855\"}}"
+
+"from": "function",
+"value": "{{{{\"results\": [{{\"name\": \"Hotel Edison\", \"address\": \"228 W 47th St, New York, NY 10036\"}}, {{\"name\": \"Marriott Marquis\", \"address\": \"1535 Broadway, New York, NY 10036\"}}]}}}}"
+
+"from": "assistant",
+"value": "Thought: I have successfully retrieved nearby hotels and completed all parts of the task.\\nAction: Finish\\nAction Input: {{\"landmarks\": [\"Times Square\", \"Central Park\", \"Statue of Liberty\"], \"nearby_hotels\": [\"Hotel Edison\", \"Marriott Marquis\"]}}"
+---
+
+---
+### Few Shot Example 6 - Unknown Error Recovery: Discovering Valid Ruleset for Spellout
+
+// Reason: User asked to convert 9876 into Russian spelled-out format using spellout tool.
+// Action: Assistant starts by calling spellout tool with rule set "default".
+"from": "user",
+"value": "\nCould you help me convert the number 9876 to its spelled-out format in Russian? I need the spelled-out version for a presentation.\nBegin!\n",
+
+"from": "assistant",
+"value": "Thought: The API is called "spellout_for_spellout" to convert the number 9876 to its spelled-out format in Russian. This specific API is used because it allows converting numbers to spelled-out format in any language. The arguments passed to the API are "data" with the value 9876, "lang" with the value "ru" for Russian, and "ruleset" with the value "default". By using these arguments, the API will accurately convert the number 9876 to its spelled-out version in the Russian language.\nAction: spellout_for_spellout\nAction Input: {{"data": 9876, "lang": "ru", "ruleset": "default"}}",
+
+// Result: Tool returns structured error indicating rule set "default" not found for Russian.
+"from": "function",
+"value": {{"error": "", "response": "Rule Set 'default' is not found for language 'ru'"}},
+
+// Result: System reports unknown due to unrecognized rule set.
+"from": "function",
+"value": ""unknown"",
+
+// Reason: Recovery triggered due to invalid ruleset for selected language.
+// Action: Query API for valid rulesets for Russian using rulesets_for_spellout.
+"from": "assistant",
+"value": "Recovery: Thought: The error indicates that the 'default' rule set is not available for the Russian language. I will first check the available rule sets for Russian to find a valid option.\nAction: rulesets_for_spellout\nAction Input: {{"lang": "ru"}}",
+
+// Result: API returns valid rule sets: "spellout-cardinal" and "spellout-ordinal".
+"from": "function",
+"value": {{"rulesets": ["spellout-cardinal", "spellout-ordinal"]}},
+
+// Reason: Assistant selects appropriate fallback rule set for cardinal numbers.
+// Action: Retry with rule set "spellout-cardinal".
+"from": "assistant",
+"value": "Recovery: Thought: The available rule sets for Russian are 'spellout-cardinal' and 'spellout-ordinal'. I will use the 'spellout-cardinal' rule set to convert the number 9876 to its spelled-out format in Russian.\nAction: spellout_for_spellout\nAction Input: {{"data": 9876, "lang": "ru", "ruleset": "spellout-cardinal"}}",
+
+// Result: API returns correct spelled-out number.
+"from": "function",
+"value": {{"spelled_out": "девять тысяч восемьсот семьдесят шесть"}},
+
+// Reason: All recovery steps successful — task complete.
+// Action: Finish with final user-facing output.
+"from": "assistant",
+"value": "Thought: I have successfully converted the number 9876 to its spelled-out format in Russian using the 'spellout-cardinal' rule set.\nAction: Finish\nAction Input: {{"return_type": "give_answer", "final_answer": "The number 9876 is spelled out as 'девять тысяч восемьсот семьдесят шесть' in Russian."}}"
+
+---
+
+## ABSOLUTE OUTPUT FORMAT RULES (NEVER DEVIATE)
+MESSAGE WRAPPERS  
+----------------
+"from": "assistant",
+"value": "Recovery: Thought: …\\nAction: …\\nAction Input: {{…}}"
+
+"from": "function",
+"value": "{{…}}"
+
+
+REQUIRED SEQUENCE  
+-----------------
+1. At least one Recovery assistant message → matching function output.  
+2. Repeat (Recovery ↔ function) until resolved.  
+3. End with either:  
+   • Action: Finish  — or —  
+   • Unable to solve
+
+The final Finish / Unable message **must** be in the same completion.
+
+GENERATION RULES  
+----------------
+• Every change mentioned in *Thought* MUST appear in *Action Input*.  
+• No duplicate Action Input unless explicitly retrying the exact same call.  
+• Function outputs must be realistic JSON, mirroring the preceding Action Input.  
+  – Use fields like `error`, `code`, `message`, `data`, etc.  
+  – Represent errors as structured objects, not plain strings.  
+• Each recovery step introduces a new hypothesis; avoid blind repetition.  
+• Reflect any header / payload / query change directly in Action Input.  
+• The final Finish / Unable message must give a clear user-facing summary.  
+• **Never** output placeholders such as `give_up_and_restart`.
+
+TOOL ADHERENCE  
+--------------
+• Include **all required parameters** exactly as defined in {tools_context}.  
+• Do **not** invent unsupported fields.  
+• If a required value is unknown, infer logically and note the assumption in Thought.
+
+VALIDATION CHECKLIST (internal)  
+-------------------------------
+✓ Action Input matches Recovery Thought.  
+✓ No meaningless duplicate retries.  
+✓ Function output is plausible.  
+✓ Sequence ends with Finish or Unable (never mid-recovery).
+---"""
+    
+    prompt_parts.append(few_shot_examples)
+    
+    # Combine all parts into the final prompt
+    prompt = "".join(prompt_parts)
+    
+    response = openai.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a precise and efficient LLM recovery agent."},
+            {"role": "user", "content": prompt.strip()}
+        ],
+        temperature=0.2,
+        max_tokens=800
+    )
+    result = response.choices[0].message.content.strip()
+    if not result:
+        print("[WARN] Empty response from OpenAI API")
+        return "Thought: API returned empty response.\nAction: Finish\nAction Input: {{\"return_type\": \"give_up_and_restart\"}}"
+    return result
+    
 
 
 def augment_with_failure(example, failure_type,failure_index):
     convo = example.get("conversations", [])
     convo_aug = []
+
+    actual_error_msg=convo[failure_index]
+
 
     #Gets the task description from id or returns No task description if none provided
     task_description = example.get("id", "No task description provided.")
@@ -1387,7 +1786,7 @@ def augment_with_failure(example, failure_type,failure_index):
     
     #convo_aug_err = convo_aug[:func_call_idx] WAS LOWKEY useless so I commented it
 
-    error_payload = {"error": f"{failure_type} {recovery_paths[failure_type]}", "response": None}
+    #error_payload = {"error": f"{failure_type} {recovery_paths[failure_type]}", "response": None}
 
     convo_aug.append({"from": "function", "value": json.dumps(failure_type)})
 
@@ -1395,6 +1794,7 @@ def augment_with_failure(example, failure_type,failure_index):
         prevthought,
         prevaction,
         prevactioninput,
+        actual_error_msg,
         failure_type,
         task_description=task_description,
         tools_info=tools_info,

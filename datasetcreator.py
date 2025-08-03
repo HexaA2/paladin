@@ -6,8 +6,7 @@ import random
 import re
 
 # === CONFIG === #
-openai.api_key = "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"
-
+openai.api_key = "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"
 
 recovery_paths = {
   "400": [
@@ -246,7 +245,7 @@ recovery_paths = {
       "value": "Escalation/Hand-off complete."
     }
   ],
-"JSON Schema Violation": [
+  "JSON Schema Violation": [
     {
       "from": "Assistant",
       "value": "Thoughts: I received a JSON Schema Violation which means the data returned or sent doesn't match the expected format or types.\n Action: Validate the offending JSON against the documented schema, identify which key or field is wrong, and try to coerce or correct invalid values before retrying the call."
@@ -362,7 +361,7 @@ recovery_paths = {
       "value": "Request completed successfully without Expect header."
     }
   ],
-"418": [
+  "418": [
     {
       "from": "Assistant",
       "value": "Thoughts: 418 I'm a Teapot is a playful HTTP code, not meant for real use, but can occasionally appear in test or poorly configured environments.\n Action: Record the occurrence for curiosity/documentation but do not retry; notify the user if the presence of this code is unexpected."
@@ -462,7 +461,7 @@ recovery_paths = {
       "value": "Retried; connection is now established and response received."
     }
   ],
-"451": [
+  "451": [
     {
       "from": "Assistant",
       "value": "Thoughts: 451 Unavailable For Legal Reasons means the server is blocking access to the resource due to legal requirements, such as copyright or local regulations.\n Action: Record this block, notify the user about the legal constraint, and suggest possible alternatives or advise contacting the provider if this is unexpected."
@@ -562,7 +561,7 @@ recovery_paths = {
       "value": "Request succeeded after required options or extensions included."
     }
   ],
-"511": [
+  "511": [
     {
       "from": "Assistant",
       "value": "Thoughts: 511 Network Authentication Required means I need to authenticate to the network (such as logging into a captive portal) before my request can proceed.\n Action: Attempt to complete the necessary network authentication (login or acknowledge terms), and then retry the request."
@@ -662,7 +661,7 @@ recovery_paths = {
       "value": "Recovery succeeded after alternative strategy or escalation performed."
     }
   ],
-"RuntimeError": [
+  "RuntimeError": [
     {
       "from": "Assistant",
       "value": "Thoughts: RuntimeError means an unexpected issue occurred during execution, possibly due to a logic or flow problem in my code or in an underlying library.\n Action: Examine the error message for cause, check recent changes or external dependencies, and reset internal state or variables as needed before retrying the failing process."
@@ -762,7 +761,7 @@ recovery_paths = {
       "value": "Request processed on retry after pause or admin notification sent for quota increase."
     }
   ],
-"QuotaExceeded": [
+  "QuotaExceeded": [
     {
       "from": "Assistant",
       "value": "Thoughts: QuotaExceeded means I've hit the system's usage or resource allocation limit (such as daily API calls or storage).\n Action: Notify the user or admin of quota reached and recommend waiting until quotas reset, or applying/requesting for higher limits if possible."
@@ -862,7 +861,7 @@ recovery_paths = {
       "value": "File operation succeeds with valid path or after recreating missing file."
     }
   ],
-"IOError": [
+  "IOError": [
     {
       "from": "Assistant",
       "value": "Thoughts: IOError signals a failure in reading, writing, or otherwise handling input/output operations due to device or system problems.\n Action: Re-check device readiness, ensure files/disks/network are available, and retry operation or notify user for manual inspection."
@@ -962,7 +961,7 @@ recovery_paths = {
       "value": "Operation resumed after dependency recovery or escalated for ongoing failure."
     }
   ],
-"ResourceLimitExceeded": [
+  "ResourceLimitExceeded": [
     {
       "from": "Assistant",
       "value": "Thoughts: ResourceLimitExceeded shows my agent exceeded its allowed limits (CPU, requests, handles, etc).\n Action: Pause execution, monitor and decrease load, and retry after some time or after resource quota reset."
@@ -1174,8 +1173,6 @@ recovery_paths = {
   ]
 }
 
-
-
 def cut_system_message(system_message):
     marker = "Specifically, you have access to the following APIs:"
     index = system_message.find(marker)
@@ -1183,6 +1180,7 @@ def cut_system_message(system_message):
         return system_message[index:]
     else:
         return system_message
+
 
 
 def extract_messages_from_gpt_output(raw: str):
@@ -1722,14 +1720,211 @@ VALIDATION CHECKLIST (internal)
         print("[WARN] Empty response from OpenAI API")
         return "Thought: API returned empty response.\nAction: Finish\nAction Input: {{\"return_type\": \"give_up_and_restart\"}}"
     return result
-    
 
+def improve_path(task,tools,oldconvo):
+    tools_context = f"Available Tools:\n{tools}" if tools else ""
+    conversation_context = f"Old version of the conversation:\n{oldconvo}" if oldconvo else ""
+
+    prompt=f"""
+You are a completion assistant tasked with rewriting partial or minimal tool-based conversations into **fully-fleshed, error-free “happy-path” dialogues**.
+
+---
+
+## Inputs Provided
+- **Task context**: {task}
+- **Tool descriptions**: {tools_context}
+- **Original conversation snippet** (for context only): {conversation_context}
+
+---
+
+## What You Must Produce
+1. A brand-new conversation that **assumes every tool call succeeds on the first try** (no recovery, no errors).
+2. At least one full **Thought → Action → Action Input → Function Output** cycle (two or more if logically needed).
+3. A final assistant message with **Action: Finish** and a JSON `final_answer` that satisfies the user’s request.
+
+---
+
+## Workflow & Formatting Rules
+- **Every assistant message** must follow  
+  `"from": "assistant", "value": "Thought: …\\nAction: …\\nAction Input: {{…}}"`  
+  (Action Input **never** `{{}}` or a placeholder).
+- **Every Action** must be **immediately** followed by a matching  
+  `"from": "function", "value": {{…}}`  
+  with realistic, structured JSON (no `"response": ""`, `[ ... ]`, or other filler).
+- Keep the dialogue concise: **no redundant “now I’ll do X” steps**—batch or summarize where sensible.
+- **Tool adherence**: use only fields allowed by *tools_context*; include all required params.
+- End with  
+  `"Action": Finish`  
+  and  
+  `"Action Input": {{"return_type": "final_answer", "final_answer": "…"}}`.
+
+## HARD CONSTRAINTS  
+
+1. **No Empty Action Input**
+   - Action Input MUST contain at least one key–value pair.
+   - If a tool truly takes no parameters, omit the call and move to the next logical step.
+
+2. **Mirrored, Valid Function Output**
+   - Function output must be **valid JSON** and must include data fields that directly correspond to the Action Input.
+   - Never output `{{}}` or `"{{}}"`.  
+     Example: If Action Input = {{"muscle":"chest"}}, Function output must include the muscle field (e.g. {{"exercises":[…]}}).
+
+3. **Use the Data You Just Got**
+   - The *Thought* following a Function output must reference specific elements of that output (e.g. counts, IDs), not generic “Now that I have…”.
+
+4. **JSON Integrity Check**
+   - All braces must close.  
+   - Any response that ends in an open brace or is not valid JSON **violates the prompt**.
+
+5. **Self-audit before Finish**
+   - Before the final Finish step, silently verify:  
+     • No Action Input is `{{}}`.  
+     • Every Function value is valid JSON.  
+     • No message ends with an unclosed brace.  
+   - If any check fails, the assistant must fix the conversation **before** outputting Finish.
+
+---
+
+## Example 1 — Single Clean Success
+
+"from": "user",
+"value": "I'm planning a weekend trip to Seattle. Can you tell me what the weather will be like on Saturday and Sunday?"
+
+"from": "assistant",
+"value": "Thought: The user wants a weekend forecast for Seattle. I will query the weather API for Saturday and Sunday.\\nAction: get_weather_forecast\\nAction Input: {{\\"location\\": \\"Seattle\\", \\"days\\": [\\"Saturday\\", \\"Sunday\\"]}}",
+
+"from": "function",
+"value": {{\\"forecast\\": {{\\"Saturday\\": {{\\"temperature_high\\": \\"72°F\\", \\"temperature_low\\": \\"58°F\\", \\"condition\\": \\"Partly Cloudy\\"}}, \\"Sunday\\": {{\\"temperature_high\\": \\"70°F\\", \\"temperature_low\\": \\"56°F\\", \\"condition\\": \\"Light Rain\\"}}}}}}",
+
+"from": "assistant",
+"value": "Thought: I have the forecast for both days.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here's the weekend weather forecast for Seattle:\\\\n\\\\n- Saturday: High 72°F / Low 58°F, Partly Cloudy\\\\n- Sunday: High 70°F / Low 56°F, Light Rain\\\\n\\\\nHave a great trip!\\"}}"
+---
+
+---
+### Few Shot Example 1 - Chest Exercises (Happy Path with Cause-Effect Comments)
+
+# Step 1 — Cause: User’s original request for chest exercises + categories
+"from": "user",
+"value": "I am a fitness enthusiast and I am looking for exercises that target the chest muscles. Can you provide me with a list of exercises along with their difficulty level and video demonstrations? Also, I would like to know the different categories of exercises available.",
+
+# Step 2 — Cause: We need the list of categories before answering; Effect: call attributes tool (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: The user also wants exercise categories. I’ll fetch the available categories first.\\nAction: get_attributes_for_musclewiki\\nAction Input: {{\\"attribute_type\\": [\\"category\\"]}}",
+
+# Step 2 Result — Effect: Categories returned (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"categories\\": [\\"Strength\\", \\"Endurance\\", \\"Flexibility\\", \\"Balance\\"]}},
+
+# Step 3 — Cause: Now we know categories; we still need chest exercises; Effect: query exercises tool 
+"from": "assistant",
+"value": "Thought: Categories obtained. Next, I’ll retrieve all exercises that target the chest muscles.\\nAction: get_exercises_for_musclewiki\\nAction Input: {{\\"muscle\\": \\"chest\\"}}",
+
+# Step 3 Result — Effect: Chest-targeting exercises with details returned (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"exercises\\": [{{\\"id\\": \\"101\\", \\"name\\": \\"Push-Up\\", \\"muscle\\": \\"chest\\", \\"difficulty\\": \\"Beginner\\", \\"video_url\\": \\"https://musclewiki.com/push-up\\"}}, {{\\"id\\": \\"102\\", \\"name\\": \\"Bench Press\\", \\"muscle\\": \\"chest\\", \\"difficulty\\": \\"Intermediate\\", \\"video_url\\": \\"https://musclewiki.com/bench-press\\"}}, {{\\"id\\": \\"103\\", \\"name\\": \\"Incline Dumbbell Press\\", \\"muscle\\": \\"chest\\", \\"difficulty\\": \\"Advanced\\", \\"video_url\\": \\"https://musclewiki.com/incline-dumbbell-press\\"}}]}},
+
+# Step 4 — Cause: We have all the required data; Effect: Finish with final answer (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: I now have chest exercises, difficulty levels, videos, and categories — ready to answer.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here are chest-targeting exercises with difficulty levels and video links:\\\\n\\\\n1. Push-Up — Beginner — https://musclewiki.com/push-up\\\\n2. Bench Press — Intermediate — https://musclewiki.com/bench-press\\\\n3. Incline Dumbbell Press — Advanced — https://musclewiki.com/incline-dumbbell-press\\\\n\\\\nAvailable exercise categories: Strength, Endurance, Flexibility, Balance.\\"}}"
+---
+
+---
+### Few Shot Example 2 — Brewery Tours in New York + Nutrition Analysis (Happy Path)
+
+# Step 1 — Cause: User asks for NY breweries with tours and nutrition info for a recipe
+"from": "user",
+"value": "I want to surprise my friends with a beer tasting party. Can you provide a list of breweries in New York that offer tours? Additionally, fetch the nutritional analysis for a recipe containing chicken, broccoli, and quinoa.",
+
+# Step 2 — Cause: Need breweries offering tours in New York → Effect: call Open Brewery DB search (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: I’ll query the brewery database for New York breweries that offer tours.\\nAction: search_for_open_brewery_db\\nAction Input: {{\\"location\\": \\"New York\\", \\"features\\": \\"tours\\"}}",
+
+# Step 2 Result — Effect: Brewery list returned  (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"breweries\\": [{{\\"name\\": \\"Brooklyn Brewery\\", \\"address\\": \\"79 N 11th St, Brooklyn, NY 11249\\", \\"tour_schedule\\": \\"Weekends\\"}}, {{\\"name\\": \\"Other Half Brewing Company\\", \\"address\\": \\"195 Centre St, Brooklyn, NY 11231\\", \\"tour_schedule\\": \\"Daily\\"}}]}},
+
+# Step 3 — Cause: Still need nutrition data for chicken–broccoli–quinoa recipe → Effect: call Edamam nutrition analysis (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: Next I’ll fetch the nutrition analysis for a recipe with chicken, broccoli, and quinoa.\\nAction: api_nutrition_data_for_edamam_nutrition_analysis\\nAction Input: {{\\"ingr\\": [\\"chicken\\", \\"broccoli\\", \\"quinoa\\"], \\"nutrition_type\\": \\"cooking\\"}}",
+
+# Step 3 Result — Effect: Nutrition data returned  (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"calories\\": 500, \\"nutrients\\": {{\\"PROCNT\\": {{\\"label\\": \\"Protein\\", \\"quantity\\": 40, \\"unit\\": \\"g\\"}}, \\"FAT\\": {{\\"label\\": \\"Fat\\", \\"quantity\\": 15, \\"unit\\": \\"g\\"}}, \\"CHOCDF\\": {{\\"label\\": \\"Carbohydrates\\", \\"quantity\\": 50, \\"unit\\": \\"g\\"}}}}}},
+
+# Step 4 — Cause: All requested data gathered → Effect: Finish with final answer (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: I have both the brewery list and the nutrition analysis. Time to present the results.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here are New York breweries that offer tours:\\\\n\\\\n- **Brooklyn Brewery** — 79 N 11th St, Brooklyn (Weekend tours)\\\\n- **Other Half Brewing Company** — 195 Centre St, Brooklyn (Daily tours)\\\\n\\\\n**Nutritional analysis** for a chicken, broccoli & quinoa recipe (per serving):\\\\n- Calories: 500 kcal\\\\n- Protein: 40 g\\\\n- Carbohydrates: 50 g\\\\n- Fat: 15 g\\\\n\\\\nHave fun at your beer-tasting party and enjoy the healthy meal!\"}}"
+---
+
+Now generate the complete, error-free conversation in this exact format.
+
+
+"""
+
+
+    response = openai.chat.completions.create(
+          model="gpt-4o",
+          messages=[
+              {"role": "system", "content": "You are a precise and efficient Completion Assistant."},
+              {"role": "user", "content": prompt.strip()}
+          ],
+          temperature=0.2,
+          max_tokens=800
+      )
+    result = response.choices[0].message.content.strip()
+    return result
+
+
+
+
+def augment_to_make_better(example):
+    convo=example.get("conversations", [])
+    convo_aug=[]
+    
+    task_description = example.get("id", "No task description provided.")
+    old_convo_context=[]
+    for i, msg in enumerate(convo):
+        if msg.get("from")=="system":
+            continue
+        old_convo_context.append(msg)
+    
+    if convo[0].get("from") == "system":
+        system_msgs = convo[0].get("value", "") 
+        tools_info = cut_system_message(system_msgs) 
+    
+    for i, msg in enumerate(convo):
+        if msg.get("from")=="system":
+            convo_aug.append(newtrainingthing(msg))
+            print("Hallelujah") 
+            break
+
+    improvedmsg=improve_path(
+      task_description,
+      tools_info,
+      old_convo_context
+    )
+    improved_messages = extract_messages_from_gpt_output(improvedmsg)
+    if not improved_messages:
+        print("DEBUG: No valid recovery messages found")
+        return None
+
+    for msg in improved_messages:
+        convo_aug.append(msg)
+
+    return {
+        "id": f"{example.get('id')}",
+        "conversations": convo_aug
+    }
+
+
+    
 
 def augment_with_failure(example, failure_type,failure_index):
     convo = example.get("conversations", [])
     convo_aug = []
 
     actual_error_msg=convo[failure_index]
+
 
 
     #Gets the task description from id or returns No task description if none provided
@@ -1801,7 +1996,6 @@ def augment_with_failure(example, failure_type,failure_index):
         recent_conversation=recent_conversation
     )
 
-    print(f"\n[GPT Recovery for {failure_type}]:\n{recovery_msg}\n")
 
 
     recovery_messages = extract_messages_from_gpt_output(recovery_msg)
@@ -1876,7 +2070,7 @@ with open(input_file, "r", encoding="utf-8") as infile, open(output_file, "w", e
         # Reset variables for each object
         failureidx = None
         failurecode = None
-        randomnum = random.randint(1, 10)
+
         
         for idx, message in enumerate(convos):
             value = message.get("value", "")
@@ -1893,24 +2087,20 @@ with open(input_file, "r", encoding="utf-8") as infile, open(output_file, "w", e
                   failurecode = "unknown"
                   randomnum = 0
         
-        if randomnum <= 8 and failureidx is not None and failurecode is not None:
+        if failureidx is not None and failurecode is not None:
             print(f"Processing object {obj.get('id', 'unknown')} with failure {failurecode} at index {failureidx}")
             newconvos = augment_with_failure(obj, failurecode, failureidx)
-            
+        
             # Only write if augmentation was successful
             if newconvos is not None:
                 outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
                 print(f"Successfully augmented object {obj.get('id', 'unknown')}")
             else:
                 # If augmentation failed, write the original object
-                outfile.write(json.dumps(obj, ensure_ascii=False) + "\n")
-                print(f"Augmentation failed for object {obj.get('id', 'unknown')}, writing original")
-        else:
-            outfile.write(json.dumps(obj, ensure_ascii=False) + "\n")
-            if failureidx is None or failurecode is None:
-                print(f"No failure found in object {obj.get('id', 'unknown')}")
-            else:
-                print(f"Random number {randomnum} > 8, skipping augmentation for object {obj.get('id', 'unknown')}")
+                continue
+        elif failureidx is None and failurecode is None:
+            newconvos=augment_to_make_better(obj)
+            outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
         
 
             

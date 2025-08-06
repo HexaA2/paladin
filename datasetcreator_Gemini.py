@@ -1177,33 +1177,39 @@ recovery_paths = {
 
 
 def chat_completion(messages,  # list[dict] with "role" & "content"
-                    model="gemini-1.5-pro",
+                    model="gemini-2.5-Flash-Lite",
                     temperature=0.4,
                     max_tokens=800):
     """
     Mimics openai.chat.completions.create() but uses Gemini.
     Returns a .text attribute identical to choices[0].message.content.
     """
-    # Gemini accepts either list-of-dicts (“chat”) or raw prompt (“parts”).
-    # We convert your OpenAI-style list automatically.
+    import google.generativeai as genai
+
+    # ---- pull out system prompt(s) ----
+    system_parts = [m["content"] for m in messages if m["role"] == "system"]
+    chat_turns   = [m for m in messages if m["role"] != "system"]
+    if system_parts:
+        sys_text = "\n".join(system_parts)
+        if chat_turns:
+            chat_turns[0]["content"] = f"{sys_text}\n\n{chat_turns[0]['content']}"
+        else:
+            chat_turns = [{"role": "user", "content": sys_text}]
+
+    role_map = {"assistant": "model"}
     converted = [
-        {"role": m["role"], "parts": [m["content"]]}
-        for m in messages
+        {"role": role_map.get(t["role"], t["role"]), "parts": [t["content"]]}
+        for t in chat_turns
     ]
-    gem_model = genai.GenerativeModel(model)
-    resp = gem_model.generate_content(
+
+    resp = genai.GenerativeModel(model).generate_content(
         converted,
-        generation_config={
-            "temperature": temperature,
-            "max_output_tokens": max_tokens,
-        },
-        safety_settings={  # optional: loosen or tighten as needed
-            "HARM_CATEGORY_DANGEROUS_CONTENT": "block_none"
-        }
+        generation_config={"temperature": temperature,
+                           "max_output_tokens": max_tokens}
     )
-    # Gemini returns a single candidate by default
+
     class _Choice:
-        def __init__(self, text):  # mimic .choices[0].message.content
+        def __init__(self, text):
             self.message = type("Msg", (), {"content": text})
     return type("FakeResp", (), {"choices": [_Choice(resp.text)]})
 
@@ -2095,8 +2101,8 @@ a=z+3
 z=str(z)
 a=str(a)
 #Ignoret the z and a its uust for file names
-input_file = f"C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/{z}-{a}k.jsonl"
-output_file = f"C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/FinalSFTTraining_{z}-{a}K.jsonl"
+input_file = f"C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/newpaladinfull.jsonl"
+output_file = f"C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/Geminidata2.jsonl"
 
 
 cnt=0

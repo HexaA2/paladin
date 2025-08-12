@@ -6,1171 +6,938 @@ import random
 import re
 
 # === CONFIG === #
-openai.api_key = "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"
+openai.api_key = ""
 
-recovery_paths = {
-  "400": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: I just received a 400 Bad Request. This usually means the server couldn't understand my request due to malformed syntax or invalid data.\n Action: Carefully review the request URL and endpoint for any typos, double slashes, or illegal characters before resending the call."
-    },
-    {
-      "from": "function",
-      "value": "No syntax issues found in the URL or endpoint; server still returns 400."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Since the URL looks fine, maybe the problem is with my request headers or required parameters.\n Action: Check every mandatory request header (such as Content-Type and Authorization) for correctness, spelling, values, and presence. Make sure required parameters are spelled and formatted exactly as in the API docs, then resend the request."
-    },
-    {
-      "from": "function",
-      "value": "Headers and parameters look correct. Resent request but still received a 400 error."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: With URL and headers good, it's likely an issue with my request body or JSON payload formatting.\n Action: Validate the structure of my payload (e.g., check that JSON is well-formed, has no trailing commas, and all required fields are present and of the correct type). Pretty-print and compare my payload against API schema or working examples, then resend corrected request."
-    },
-    {
-      "from": "function",
-      "value": "JSON and payload are now valid, but I still get a 400 error from the server."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: If all the values are now correct, maybe my payload is too large, or I'm sending extra/unexpected data.\n Action: Reduce payload size or remove optional fields; ensure there aren't any hidden or null values. Also clear any local cookies or session data that could be interfering, then try the request again."
-    },
-    {
-      "from": "function",
-      "value": "400 error persists after all structural checks."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: If I've ruled out all formatting issues and unnecessary data, perhaps the server expects a specific field format or special value that's not obvious in documentation.\n Action: Re-read official API documentation to verify required value formats (e.g., date format, string casing), hidden required fields, and example requests. Test with minimal, known-good sample data if available."
-    },
-    {
-      "from": "function",
-      "value": "If the API sample succeeds, incrementally add fields until the issue recurs. If unsuccessful after all checks, escalate with full request details."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Automated corrections failed. This problem could require deeper investigation.\n Action: Log the full failed request, server response, and all troubleshooting steps taken so far. Escalate to a human developer or support team for further triage."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "401": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: I received a 401 Unauthorized error, indicating my credentials are invalid or missing for this API request.\n Action: Double-check if I included the Authorization or API key header, and verify its value is current and correctly formatted."
-    },
-    {
-      "from": "function",
-      "value": "Authorization header is present but request is still unauthorized."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: The key or token might be expired, revoked, or lacking required privileges.\n Action: Attempt to refresh or obtain a new API token and resend the request with updated credentials."
-    },
-    {
-      "from": "function",
-      "value": "Resent request with new credentials but still received 401 error."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Credential updates failed; this probably requires manual intervention or admin help.\n Action: Log the failed request, notify the user to check account status or permissions, and request a credential reset if needed."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "403": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 403 Forbidden means I am authenticated, but not allowed to access this resource.\n Action: Review the API docs and confirm my account, key, or token should have access to this endpoint."
-    },
-    {
-      "from": "function",
-      "value": "Confirmed that my permissions should allow access, but the request still returns 403."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Maybe organization policy, resource-specific ACL, or account role restricts access.\n Action: Check for special resource access settings, and if possible, try with alternate credentials or request additional privileges."
-    },
-    {
-      "from": "function",
-      "value": "Still blocked from resource after all credential checks."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: I've exhausted my options. This restriction may be intentional or require admin intervention.\n Action: Report the 403 error with full request details and advise team or admin to review access rights or update roles."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "404": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 404 Not Found means the resource or endpoint I requested does not exist or may have been moved or deleted.\n Action: Check for typos in the request URL and endpoint, and examine resource identifiers against the latest API docs."
-    },
-    {
-      "from": "function",
-      "value": "URL and identifiers look correct; still receiving 404."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Resource could be renamed, deleted, or access is restricted by organization or account.\n Action: Search for similar resources, alternative endpoints, or use listing APIs to verify existence or find a replacement."
-    },
-    {
-      "from": "function",
-      "value": "No alternative resource found; 404 persists."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: This appears to be a permanent missing resource. Further automation will not help.\n Action: Log the details and notify the project owner or developer for confirmation, migration instructions, or recreation."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "500": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 500 Internal Server Error is a server-side failure, often transient.\n Action: Retry the request using exponential backoff (wait 1s, 2s, 4s), up to 3 times."
-    },
-    {
-      "from": "function",
-      "value": "All retries exhausted; server still returns 500."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Persistent 500 error signals a wider server problem.\n Action: Check the API provider's status page for outages or maintenance. Log the problem and defer this task until the service is back up."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "503": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Received 503 Service Unavailable, meaning temporary server overload or maintenance.\n Action: Look for a Retry-After header in the response and wait that amount before retrying."
-    },
-    {
-      "from": "function",
-      "value": "No Retry-After header supplied; using default exponential backoff."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Still no success. Service may have a prolonged outage.\n Action: Log multiple failed attempts and inform user or admin to check provider status or try later."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "408": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Request timed out; the server did not respond promptly—could be a network or server delay.\n Action: Retry the request with exponential backoff, and if possible increase the timeout interval on subsequent attempts."
-    },
-    {
-      "from": "function",
-      "value": "Still timing out after multiple retries."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Persistent timeouts may indicate a network issue or severe server overload.\n Action: Ping endpoint, check alternate server if available, or notify user to check application/network health."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "DNS Resolution Error": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: DNS Resolution Error means the hostname could not be resolved to an IP address.\n Action: Double-check the domain name for typos or outdated endpoints in the request."
-    },
-    {
-      "from": "function",
-      "value": "Domain is correct; error still persists."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: DNS problems could be temporary or depend on infrastructure issues.\n Action: Attempt to resolve a well-known public hostname to verify local DNS health. If custom domain still fails, retry later or escalate to admin."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "429": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 429 Too Many Requests means I've hit the server's rate limit for this resource or API key.\n Action: Honor any Retry-After timeout in the response, and if it's missing, apply a backoff delay before trying again."
-    },
-    {
-      "from": "function",
-      "value": "Rate limit persists after waiting and retrying."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Frequent rate limiting could mean my usage is too high or has exceeded my quota.\n Action: Reduce request volume, spread calls out, and notify user/admin to request higher quota if necessary."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "Malformed JSON": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Server returned malformed JSON, indicating a parsing failure from a possible server bug or incomplete data.\n Action: Retry the same API request in case this was a temporary error."
-    },
-    {
-      "from": "function",
-      "value": "Response is still malformed after retry."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Persistent JSON issues suggest a backend or integration bug.\n Action: Try to repair the response with tolerant parsing or reconstruct from partial data. If still unparseable, log details and escalate to API owner or user for support."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "JSON Schema Violation": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: I received a JSON Schema Violation which means the data returned or sent doesn't match the expected format or types.\n Action: Validate the offending JSON against the documented schema, identify which key or field is wrong, and try to coerce or correct invalid values before retrying the call."
-    },
-    {
-      "from": "function",
-      "value": "Schema fix attempted. Error persists for certain field(s)."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: Not all fields could be auto-corrected; this might be a server data issue or deep integration bug.\n Action: Log which field(s) are failing, omit or correct them if possible, and if still failing, escalate the error to development or support."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "409": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 409 Conflict means my request clashes with the current state of the resource (e.g., editing a document that changed).\n Action: Retrieve the latest version or state of the resource, merge my changes accordingly, or refresh state before retrying the operation."
-    },
-    {
-      "from": "function",
-      "value": "Retried with updated resource state, but still encountering conflict."
-    },
-    {
-      "from": "Assistant",
-      "value": "Thoughts: The conflict might require manual intervention or a merge strategy.\n Action: Log the conflicting change, alert the user, and provide them the conflicting states to resolve manually."
-    },
-    {
-      "from": "function",
-      "value": "Escalation/Hand-off complete."
-    }
-  ],
-  "410": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 410 Gone indicates the resource is permanently deleted and will not return in the future.\n Action: Notify the user that the resource is gone and suggest searching for alternatives or recreating if critical."
-    },
-    {
-      "from": "function",
-      "value": "User notified; action cannot continue without new or alternative resource."
-    }
-  ],
-  "411": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 411 Length Required means the server needs to know the size of my payload but it was missing from my request.\n Action: Add an appropriate Content-Length header indicating the request's payload size and retry the request."
-    },
-    {
-      "from": "function",
-      "value": "Content-Length header added; request processed."
-    }
-  ],
-  "412": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 412 Precondition Failed means the request had an If-* header or precondition that wasn't satisfied (e.g., ETag mismatch).\n Action: Fetch the latest state or version, adjust my preconditions, and try again only if they now match."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded with updated precondition."
-    }
-  ],
-  "413": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 413 Payload Too Large means my data upload exceeds the server's limit.\n Action: Reduce payload size (compress, split, or chunk the data) and resend the request. If needed, request server for higher limits."
-    },
-    {
-      "from": "function",
-      "value": "Payload accepted after reduction."
-    }
-  ],
-  "414": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 414 URI Too Long means the URL I sent exceeded what the server supports (usually thousands of characters).\n Action: Move data to the request body if possible, shorten the query, or switch from GET to POST where appropriate."
-    },
-    {
-      "from": "function",
-      "value": "Request with shortened URI processed successfully."
-    }
-  ],
-  "415": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 415 Unsupported Media Type shows that my Content-Type is not accepted by the server.\n Action: Change the Content-Type header to a supported value per API docs and retry."
-    },
-    {
-      "from": "function",
-      "value": "Request accepted after changing Content-Type."
-    }
-  ],
-  "416": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 416 Range Not Satisfiable means the byte-range I requested is outside the resource's available range (e.g., file ends at byte 1000, requested 1001-2000).\n Action: Adjust or remove the Range header to request valid or all available data, then resend."
-    },
-    {
-      "from": "function",
-      "value": "Valid range request accepted."
-    }
-  ],
-  "417": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 417 Expectation Failed means my Expect header was not met by the server—possibly not supported or available.\n Action: Remove or modify the Expect header and retry the request."
-    },
-    {
-      "from": "function",
-      "value": "Request completed successfully without Expect header."
-    }
-  ],
-  "418": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 418 I'm a Teapot is a playful HTTP code, not meant for real use, but can occasionally appear in test or poorly configured environments.\n Action: Record the occurrence for curiosity/documentation but do not retry; notify the user if the presence of this code is unexpected."
-    },
-    {
-      "from": "function",
-      "value": "No correction possible; humorous/test status code logged. No further action."
-    }
-  ],
-  "421": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 421 Misdirected Request means my call was sent to a server that is not configured to serve it—could be a routing/load balancer error.\n Action: Review endpoint/server selection logic and reroute the request to the proper backend or API gateway."
-    },
-    {
-      "from": "function",
-      "value": "Request re-routed; now processed by the correct backend server."
-    }
-  ],
-  "422": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 422 Unprocessable Entity indicates the server understood the request syntax but the semantic content is invalid (such as a missing or misformatted field).\n Action: Parse the error details, identify the problematic field or logic, correct it in the request payload, and resend."
-    },
-    {
-      "from": "function",
-      "value": "Updated request with validated data accepted."
-    }
-  ],
-  "423": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 423 Locked means the resource is currently locked by another user or process.\n Action: Wait for a short period and attempt the request again; if still locked, notify the user and offer to retry or abandon."
-    },
-    {
-      "from": "function",
-      "value": "Resource lock released on retry; operation succeeded."
-    }
-  ],
-  "424": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 424 Failed Dependency signals that a previous required operation failed, causing this request to fail as well.\n Action: Trace through dependency chain, resolve errors in required/preceding operations, then retry the current request."
-    },
-    {
-      "from": "function",
-      "value": "Dependency operation fixed; main request completed after dependencies resolved."
-    }
-  ],
-  "425": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 425 Too Early means the server is unwilling to process a request that might be replayed (often during TLS negotiation).\n Action: Wait as suggested (if a Retry-After is present), then retry the request; otherwise, ensure no premature replays and try after a safety delay."
-    },
-    {
-      "from": "function",
-      "value": "Request accepted on delayed retry; operation completed."
-    }
-  ],
-  "426": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 426 Upgrade Required is returned when the server demands I switch protocols for this request (e.g., from HTTP to HTTPS, or to a newer version).\n Action: Adjust my connection to use the server-requested protocol, updating headers and base URLs as needed, then retry."
-    },
-    {
-      "from": "function",
-      "value": "Request completed successfully using upgraded protocol."
-    }
-  ],
-  "428": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 428 Precondition Required means the server demands preconditions (like If-Match or If-None-Match headers) to prevent accidental overwrites.\n Action: Add the required precondition headers to my request, referencing the latest resource state, and resend."
-    },
-    {
-      "from": "function",
-      "value": "Request completed after precondition headers added."
-    }
-  ],
-  "431": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 431 Request Header Fields Too Large signals my headers or cookies are too big.\n Action: Reduce the size and number of headers or cookies in my request, then resend."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded after header/cookie reduction."
-    }
-  ],
-  "444": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 444 No Response indicates the server closed the connection without sending a response, possibly due to firewall or load rules.\n Action: Log the occurrence, wait briefly, and retry; if repeated, notify the user or escalate to network admin for server investigation."
-    },
-    {
-      "from": "function",
-      "value": "Retried; connection is now established and response received."
-    }
-  ],
-  "451": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 451 Unavailable For Legal Reasons means the server is blocking access to the resource due to legal requirements, such as copyright or local regulations.\n Action: Record this block, notify the user about the legal constraint, and suggest possible alternatives or advise contacting the provider if this is unexpected."
-    },
-    {
-      "from": "function",
-      "value": "User notified of legal restriction; no further automated action possible."
-    }
-  ],
-  "498": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 498 Invalid Token indicates my authentication token is invalid, expired, or malformed.\n Action: Attempt to obtain a new valid token (refresh or re-authenticate), update the request, and try again."
-    },
-    {
-      "from": "function",
-      "value": "Token refreshed and request retried. If the error persists, user needs to check for token revocation or API changes."
-    }
-  ],
-  "499": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 499 Token Required means the server expects an authentication token but none was provided.\n Action: Acquire a valid token via the authentication workflow; include it in the request headers, and resend the call."
-    },
-    {
-      "from": "function",
-      "value": "Request completed after token included."
-    }
-  ],
-  "501": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 501 Not Implemented shows that the server does not support the method requested for the resource.\n Action: Check API documentation for supported methods and revise my request (e.g., switch from POST to GET or adjust endpoint)."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded with supported method."
-    }
-  ],
-  "502": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 502 Bad Gateway means that a gateway or proxy received an invalid response from an upstream server.\n Action: Retry the request after a brief pause, check provider status pages, and if problem persists, consider using a backup server or inform the user."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded after retry or user notified of persistent upstream issues."
-    }
-  ],
-  "504": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 504 Gateway Timeout indicates a proxy could not get a timely response from an upstream server.\n Action: Retry the request with increased timeout, and check upstream service health if failures persist."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded after retry or alert sent for upstream server downtime."
-    }
-  ],
-  "505": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 505 HTTP Version Not Supported means the server will not accept the request using this HTTP protocol.\n Action: Update the request to use a supported HTTP version (such as HTTP/1.1 or HTTP/2), and resend."
-    },
-    {
-      "from": "function",
-      "value": "Request processed with updated protocol."
-    }
-  ],
-  "507": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 507 Insufficient Storage means the server can't save new data due to lack of space.\n Action: Inform the user or admin, request to clear unused files or expand storage, then retry if possible."
-    },
-    {
-      "from": "function",
-      "value": "User notified and system admin alerted for storage expansion."
-    }
-  ],
-  "508": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 508 Loop Detected means the server found an infinite loop in request processing (like WebDAV collections).\n Action: Alter the resource's references to break the loop and retry the operation; if not possible, log full state for review."
-    },
-    {
-      "from": "function",
-      "value": "Loop resolved; resource updated successfully or escalated for manual fix."
-    }
-  ],
-  "510": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 510 Not Extended means further resources, options, or headers are needed to fulfill this request.\n Action: Check the error details and API documentation for required extensions or headers, add them, and resend."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded after required options or extensions included."
-    }
-  ],
-  "511": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 511 Network Authentication Required means I need to authenticate to the network (such as logging into a captive portal) before my request can proceed.\n Action: Attempt to complete the necessary network authentication (login or acknowledge terms), and then retry the request."
-    },
-    {
-      "from": "function",
-      "value": "Network authentication completed; request processed successfully."
-    }
-  ],
-  "529": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 529 Site is Overloaded indicates the server or service is currently experiencing heavy traffic and cannot process my request right now.\n Action: Wait a few minutes, retry with exponential backoff, and inform the user if high load persists."
-    },
-    {
-      "from": "function",
-      "value": "Service stabilized and request processed after delay."
-    }
-  ],
-  "530": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 530 Site is Frozen means access to this resource is suspended, usually for billing or policy reasons.\n Action: Notify the user or admin about the suspension and suggest contacting support or resolving outstanding issues."
-    },
-    {
-      "from": "function",
-      "value": "User notified of frozen account or resource."
-    }
-  ],
-  "540": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 540 Temporarily Disabled indicates that this service or endpoint is intentionally disabled for maintenance or other reasons.\n Action: Inform the user, log the downtime, and suggest retrying after maintenance is complete."
-    },
-    {
-      "from": "function",
-      "value": "Maintenance ongoing; user notified to check again later."
-    }
-  ],
-  "598": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 598 Network Read Timeout (Proxy) means the proxy timed out waiting for a response from upstream.\n Action: Retry the request, optionally increasing the timeout, and if the error persists, check network or proxy health."
-    },
-    {
-      "from": "function",
-      "value": "Request succeeded after increased timeout or network issue reported."
-    }
-  ],
-  "599": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: 599 Network Connect Timeout (Proxy) means the proxy failed to establish a connection to the upstream server.\n Action: Retry connection after a short delay; if it fails repeatedly, escalate to network administrator or user."
-    },
-    {
-      "from": "function",
-      "value": "Connection re-established and request processed or user escalated for persistent failures."
-    }
-  ],
-  "NoSuchToolError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: NoSuchToolError indicates I tried to invoke a tool or function that is not registered or available in the environment.\n Action: Double-check tool names for typos, consult tool registry or docs, and retry with the correct tool identifier."
-    },
-    {
-      "from": "function",
-      "value": "Request processed after fixing tool name or selection."
-    }
-  ],
-  "InvalidToolArgumentsError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: InvalidToolArgumentsError means I provided arguments to a tool/function that are missing, misspelled, or of the wrong type.\n Action: Review tool usage documentation, correct the arguments or data types, and re-issue the tool call."
-    },
-    {
-      "from": "function",
-      "value": "Tool executed successfully with corrected arguments."
-    }
-  ],
-  "ToolExecutionError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ToolExecutionError signals an internal failure or exception during tool or command execution.\n Action: Capture and log detailed tool output or error trace, retry the call if transient, or advise user if it is a persistent fault."
-    },
-    {
-      "from": "function",
-      "value": "Either resolved on retry or escalated for user troubleshooting."
-    }
-  ],
-  "ToolCallRepairError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ToolCallRepairError means a previous attempt to automatically recover/repair a failed tool call did not work.\n Action: Switch strategy (e.g., reset tool state, try a different tool, or escalate for developer intervention if repeated repairs fail)."
-    },
-    {
-      "from": "function",
-      "value": "Recovery succeeded after alternative strategy or escalation performed."
-    }
-  ],
-  "RuntimeError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: RuntimeError means an unexpected issue occurred during execution, possibly due to a logic or flow problem in my code or in an underlying library.\n Action: Examine the error message for cause, check recent changes or external dependencies, and reset internal state or variables as needed before retrying the failing process."
-    },
-    {
-      "from": "function",
-      "value": "Error persists or is resolved based on cause; error details logged."
-    }
-  ],
-  "DataError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: DataError signals that data retrieved or provided is invalid, missing, or malformed for the expected operation.\n Action: Validate and clean the data; identify missing or out-of-schema values, attempt to fill or correct bad values, and retry processing."
-    },
-    {
-      "from": "function",
-      "value": "Process completes with corrected data or fails and is logged for human review."
-    }
-  ],
-  "ConnectionError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ConnectionError means there was a failure establishing or maintaining a network connection (such as a broken pipe or dropped socket).\n Action: Test network reachability, retry with exponential backoff, switch to backup connection or endpoint if available."
-    },
-    {
-      "from": "function",
-      "value": "Request sent successfully on retry or escalated for persistent connectivity issues."
-    }
-  ],
-  "TypeError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: TypeError means I attempted to process or pass a value of the wrong type to a function or operation.\n Action: Check input variable and argument types, cast or convert as needed per API requirements, then re-run the operation."
-    },
-    {
-      "from": "function",
-      "value": "Request or calculation succeeds with correct types."
-    }
-  ],
-  "NullPointerException": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: NullPointerException shows I tried to operate on a variable, object, or value that was not set (null).\n Action: Trace back in logic to ensure object/variable initialization, add checks for null/None, and retry after correction."
-    },
-    {
-      "from": "function",
-      "value": "Operation completed successfully after null-check or variable/object initialization."
-    }
-  ],
-  "IndexOutOfBoundsException": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: IndexOutOfBoundsException means I accessed an array or list using an index that's too high or negative.\n Action: Verify variable lengths/range, add bounds checks, and adjust loop logic or input indices before retrying."
-    },
-    {
-      "from": "function",
-      "value": "Access corrected; operation successful with valid indices."
-    }
-  ],
-  "ClassCastException": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ClassCastException signals an invalid type conversion attempt (e.g., casting a string to an integer where inappropriate).\n Action: Check types before casting, enforce strict type checking and validation, and fix source data or logic if needed."
-    },
-    {
-      "from": "function",
-      "value": "Conversion corrected and operation retried successfully."
-    }
-  ],
-  "StackOverflowError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: StackOverflowError is caused by excessive or infinite recursion, exhausting the stack space.\n Action: Review recursion base cases and loop logic, refactor to iterative methods if possible, and retry."
-    },
-    {
-      "from": "function",
-      "value": "Process completed after recursion/logic correction."
-    }
-  ],
-  "OutOfMemoryError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: OutOfMemoryError means the program asked for more memory than available.\n Action: Free unused resources, reduce data load or batch sizes, and advise user/admin to increase system memory if needed."
-    },
-    {
-      "from": "function",
-      "value": "Operation completes after memory issue resolved or logged for environment adjustment."
-    }
-  ],
-  "ResourceLimitExceeded": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ResourceLimitExceeded shows my agent exceeded its allowed limits (CPU, requests, handles, etc).\n Action: Pause execution, monitor and decrease load, and retry after some time or after resource quota reset."
-    },
-    {
-      "from": "function",
-      "value": "Request processed on retry after pause or admin notification sent for quota increase."
-    }
-  ],
-  "QuotaExceeded": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: QuotaExceeded means I've hit the system's usage or resource allocation limit (such as daily API calls or storage).\n Action: Notify the user or admin of quota reached and recommend waiting until quotas reset, or applying/requesting for higher limits if possible."
-    },
-    {
-      "from": "function",
-      "value": "Request processed after quota reset or user notified about quota exhaustion."
-    }
-  ],
-  "RateLimitExceeded": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: RateLimitExceeded signals my requests are too frequent for the service's policies.\n Action: Slow down request frequency, apply backoff strategies, and if needed, coordinate to spread operations over time."
-    },
-    {
-      "from": "function",
-      "value": "Service resumes accepting requests after rate reduced."
-    }
-  ],
-  "PermissionDeniedError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: PermissionDeniedError means I lack appropriate rights to access the file or resource.\n Action: Check current permissions, request escalation from user or admin, or select an alternative location with correct access."
-    },
-    {
-      "from": "function",
-      "value": "Access granted after permission change or alternative path used."
-    }
-  ],
-  "CertificateError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: CertificateError means there was a problem with server-side SSL/TLS certificates during secure connection setup.\n Action: Re-check URL for typos, trust settings, or expired/self-signed certificates, and consult documentation for accepted certificate authorities."
-    },
-    {
-      "from": "function",
-      "value": "Secure connection successful after correcting certificate or trust settings."
-    }
-  ],
-  "ModuleNotFoundError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ModuleNotFoundError signals that a required software or Python module is missing.\n Action: Verify package install, pip/conda dependencies, and sys.path; install or update as necessary."
-    },
-    {
-      "from": "function",
-      "value": "Module successfully imported after installation or environment fix."
-    }
-  ],
-  "ImportError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ImportError means code attempted to import something not present or misspelled in the module or path.\n Action: Check spelling, dependency installation, and verify correct import syntax, then retry."
-    },
-    {
-      "from": "function",
-      "value": "Import succeeded after correction."
-    }
-  ],
-  "AttributeError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: AttributeError means I tried to access a property or method that doesn't exist on the object.\n Action: Double-check object type and available attributes, update code to match correct API or object structure."
-    },
-    {
-      "from": "function",
-      "value": "Operation completes after correcting attribute usage."
-    }
-  ],
-  "KeyError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: KeyError means a requested dictionary key is missing from the data structure.\n Action: Safely check for key existence before accessing, provide defaults, or repair/validate input data."
-    },
-    {
-      "from": "function",
-      "value": "Success after ensuring all accessed keys exist or providing defaults."
-    }
-  ],
-  "ValueError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ValueError signals a function got an argument of right type but inappropriate value (e.g., out-of-range number).\n Action: Validate and adjust arguments/ranges before retrying operation."
-    },
-    {
-      "from": "function",
-      "value": "Process completes successfully with correct values."
-    }
-  ],
-  "FileNotFoundError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: FileNotFoundError means a file or directory was not found during an operation.\n Action: Double-check file path and name, and create or request the missing file if necessary."
-    },
-    {
-      "from": "function",
-      "value": "File operation succeeds with valid path or after recreating missing file."
-    }
-  ],
-  "IOError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: IOError signals a failure in reading, writing, or otherwise handling input/output operations due to device or system problems.\n Action: Re-check device readiness, ensure files/disks/network are available, and retry operation or notify user for manual inspection."
-    },
-    {
-      "from": "function",
-      "value": "I/O operation completes after environment or device reset, or user escalation if persistent."
-    }
-  ],
-  "UncaughtException": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: UncaughtException means an error was raised but not properly handled by the code or system.\n Action: Review error trace, add appropriate exception handling with try/except/finally blocks, and rerun after logic is improved."
-    },
-    {
-      "from": "function",
-      "value": "Process runs with error caught, or escalated if error source could not be corrected."
-    }
-  ],
-  "AuthenticationTimeout": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: AuthenticationTimeout happened; the login sequence did not succeed within allotted time, often due to network or server load.\n Action: Increase timeout window if allowed, retry authentication, and advise user or switch endpoints if repeated."
-    },
-    {
-      "from": "function",
-      "value": "Authentication completes or user switched endpoint/sought support for persistent timeout."
-    }
-  ],
-  "WritePermissionError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: WritePermissionError means the agent doesn't have rights to write to the desired output location.\n Action: Request or assign correct permissions, change output location, or inform admin for elevated writes."
-    },
-    {
-      "from": "function",
-      "value": "Write completes after permissions fixed or safe destination selected."
-    }
-  ],
-  "ReadError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ReadError points to a failure reading from file, stream, or socket—could be corruption, access, or network issues.\n Action: Retry with error correction, open alternatives or backups if available, and notify user/admin if persistent."
-    },
-    {
-      "from": "function",
-      "value": "Read successful on retry, fallback, or reported for further repair."
-    }
-  ],
-  "BrokenPipeError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: BrokenPipeError shows a data connection was closed or lost during transmission.\n Action: Attempt to reestablish the pipe or network connection, and resume the interrupted operation."
-    },
-    {
-      "from": "function",
-      "value": "Transmission successful after reconnection."
-    }
-  ],
-  "BadGatewayError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: BadGatewayError means the gateway/proxy received an invalid response from an upstream server.\n Action: Retry, check service health, use a backup server if available, or escalate to admin if persistent."
-    },
-    {
-      "from": "function",
-      "value": "Gateway functioning after fix or backup server."
-    }
-  ],
-  "ParseError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ParseError occurs when I can't correctly process server data, such as malformed or unexpected formats.\n Action: Check server output, apply tolerant parsing if possible, or notify user if unresolvable."
-    },
-    {
-      "from": "function",
-      "value": "Parsed data after correction or user notified of format incompatibility."
-    }
-  ],
-  "InvalidContentType": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: InvalidContentType means the received data type doesn't match what I expected for the operation.\n Action: Request the correct format from the server, adjust handling logic, or negotiate for compatible format."
-    },
-    {
-      "from": "function",
-      "value": "Data processed after content type match or fallback."
-    }
-  ],
-  "ServiceDependencyFailure": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ServiceDependencyFailure signals that a required upstream or dependent service failed and caused cascading issues.\n Action: Identify which service is down, alert infrastructure or admin, and retry only once dependency is healthy."
-    },
-    {
-      "from": "function",
-      "value": "Operation resumed after dependency recovery or escalated for ongoing failure."
-    }
-  ],
-  "ResourceLimitExceeded": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ResourceLimitExceeded shows my agent exceeded its allowed limits (CPU, requests, handles, etc).\n Action: Pause execution, monitor and decrease load, and retry after some time or after resource quota reset."
-    },
-    {
-      "from": "function",
-      "value": "Request processed on retry after pause or admin notification sent for quota increase."
-    }
-  ],
-  "QuotaExceeded": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: QuotaExceeded means I've hit the system's usage or resource allocation limit (such as daily API calls or storage).\n Action: Notify the user or admin of quota reached and recommend waiting until quotas reset, or applying/requesting for higher limits if possible."
-    },
-    {
-      "from": "function",
-      "value": "Request processed after quota reset or user notified about quota exhaustion."
-    }
-  ],
-  "RateLimitExceeded": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: RateLimitExceeded signals my requests are too frequent for the service's policies.\n Action: Slow down request frequency, apply backoff strategies, and if needed, coordinate to spread operations over time."
-    },
-    {
-      "from": "function",
-      "value": "Service resumes accepting requests after rate reduced."
-    }
-  ],
-  "PermissionDeniedError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: PermissionDeniedError means I lack appropriate rights to access the file or resource.\n Action: Check current permissions, request escalation from user or admin, or select an alternative location with correct access."
-    },
-    {
-      "from": "function",
-      "value": "Access granted after permission change or alternative path used."
-    }
-  ],
-  "CertificateError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: CertificateError means there was a problem with server-side SSL/TLS certificates during secure connection setup.\n Action: Re-check URL for typos, trust settings, or expired/self-signed certificates, and consult documentation for accepted certificate authorities."
-    },
-    {
-      "from": "function",
-      "value": "Secure connection successful after correcting certificate or trust settings."
-    }
-  ],
-  "ModuleNotFoundError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ModuleNotFoundError signals that a required software or Python module is missing.\n Action: Verify package install, pip/conda dependencies, and sys.path; install or update as necessary."
-    },
-    {
-      "from": "function",
-      "value": "Module successfully imported after installation or environment fix."
-    }
-  ],
-  "ImportError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ImportError means code attempted to import something not present or misspelled in the module or path.\n Action: Check spelling, dependency installation, and verify correct import syntax, then retry."
-    },
-    {
-      "from": "function",
-      "value": "Import succeeded after correction."
-    }
-  ],
-  "AttributeError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: AttributeError means I tried to access a property or method that doesn't exist on the object.\n Action: Double-check object type and available attributes, update code to match correct API or object structure."
-    },
-    {
-      "from": "function",
-      "value": "Operation completes after correcting attribute usage."
-    }
-  ],
-  "KeyError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: KeyError means a requested dictionary key is missing from the data structure.\n Action: Safely check for key existence before accessing, provide defaults, or repair/validate input data."
-    },
-    {
-      "from": "function",
-      "value": "Success after ensuring all accessed keys exist or providing defaults."
-    }
-  ],
-  "ValueError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ValueError signals a function got an argument of right type but inappropriate value (e.g., out-of-range number).\n Action: Validate and adjust arguments/ranges before retrying operation."
-    },
-    {
-      "from": "function",
-      "value": "Process completes successfully with correct values."
-    }
-  ],
-  "FileNotFoundError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: FileNotFoundError means a file or directory was not found during an operation.\n Action: Double-check file path and name, and create or request the missing file if necessary."
-    },
-    {
-      "from": "function",
-      "value": "File operation succeeds with valid path or after recreating missing file."
-    }
-  ],
-  "IOError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: IOError signals a failure in reading, writing, or otherwise handling input/output operations due to device or system problems.\n Action: Re-check device readiness, ensure files/disks/network are available, and retry operation or notify user for manual inspection."
-    },
-    {
-      "from": "function",
-      "value": "I/O operation completes after environment or device reset, or user escalation if persistent."
-    }
-  ],
-  "UncaughtException": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: UncaughtException means an error was raised but not properly handled by the code or system.\n Action: Review error trace, add appropriate exception handling with try/except/finally blocks, and rerun after logic is improved."
-    },
-    {
-      "from": "function",
-      "value": "Process runs with error caught, or escalated if error source could not be corrected."
-    }
-  ],
-  "AuthenticationTimeout": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: AuthenticationTimeout happened; the login sequence did not succeed within allotted time, often due to network or server load.\n Action: Increase timeout window if allowed, retry authentication, and advise user or switch endpoints if repeated."
-    },
-    {
-      "from": "function",
-      "value": "Authentication completes or user switched endpoint/sought support for persistent timeout."
-    }
-  ],
-  "WritePermissionError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: WritePermissionError means the agent doesn't have rights to write to the desired output location.\n Action: Request or assign correct permissions, change output location, or inform admin for elevated writes."
-    },
-    {
-      "from": "function",
-      "value": "Write completes after permissions fixed or safe destination selected."
-    }
-  ],
-  "ReadError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ReadError points to a failure reading from file, stream, or socket—could be corruption, access, or network issues.\n Action: Retry with error correction, open alternatives or backups if available, and notify user/admin if persistent."
-    },
-    {
-      "from": "function",
-      "value": "Read successful on retry, fallback, or reported for further repair."
-    }
-  ],
-  "BrokenPipeError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: BrokenPipeError shows a data connection was closed or lost during transmission.\n Action: Attempt to reestablish the pipe or network connection, and resume the interrupted operation."
-    },
-    {
-      "from": "function",
-      "value": "Transmission successful after reconnection."
-    }
-  ],
-  "BadGatewayError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: BadGatewayError means the gateway/proxy received an invalid response from an upstream server.\n Action: Retry, check service health, use a backup server if available, or escalate to admin if persistent."
-    },
-    {
-      "from": "function",
-      "value": "Gateway functioning after fix or backup server."
-    }
-  ],
-  "ParseError": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ParseError occurs when I can't correctly process server data, such as malformed or unexpected formats.\n Action: Check server output, apply tolerant parsing if possible, or notify user if unresolvable."
-    },
-    {
-      "from": "function",
-      "value": "Parsed data after correction or user notified of format incompatibility."
-    }
-  ],
-  "InvalidContentType": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: InvalidContentType means the received data type doesn't match what I expected for the operation.\n Action: Request the correct format from the server, adjust handling logic, or negotiate for compatible format."
-    },
-    {
-      "from": "function",
-      "value": "Data processed after content type match or fallback."
-    }
-  ],
-  "ServiceDependencyFailure": [
-    {
-      "from": "Assistant",
-      "value": "Thoughts: ServiceDependencyFailure signals that a required upstream or dependent service failed and caused cascading issues.\n Action: Identify which service is down, alert infrastructure or admin, and retry only once dependency is healthy."
-    },
-    {
-      "from": "function",
-      "value": "Operation resumed after dependency recovery or escalated for ongoing failure."
-    }
-  ]
+recovery_paths={
+  "_legend": {
+    "t": "Thought",
+    "do": "Action (conceptual, not a tool name)",
+    "out": "Simulated function output/result"
+  },
+  "400": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "400 → malformed input likely; even though URL/endpoint looked fine, it still fails"
+        ],
+        [
+          "do",
+          "Check headers & required params; correct Content-Type/Auth; resend"
+        ],
+        ["out", { "error": { "code": 400, "message": "Bad Request" } }],
+        [
+          "t",
+          "Still 400 → payload/schema suspect (types, required, enums, formats)"
+        ],
+        ["do", "Validate JSON against schema; fix offending fields; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Resolved after correcting schema; Finish"]
+      ],
+      "fail": [
+        [
+          "t",
+          "400 persists after URL, headers, schema, and minimal-payload checks"
+        ],
+        [
+          "do",
+          "Test known-good sample; diff to find hidden rule; if unresolved, escalate with req/resp & steps"
+        ],
+        ["out", { "hand_off": "400_unresolved" }]
+      ]
+    }
+  },
+  "401": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "401 → creds invalid; even though Authorization header exists, still 401"
+        ],
+        ["do", "Refresh/obtain token; verify scope/audience; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Authorized; Finish"]
+      ],
+      "fail": [
+        ["t", "Still 401 after refresh → account/role issue"],
+        [
+          "do",
+          "Notify admin/user to fix roles or re-enable account; attach failing req details"
+        ],
+        ["out", { "hand_off": "401_permissions" }]
+      ]
+    }
+  },
+  "403": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "403 → authenticated but forbidden; even though docs say we should have access, still denied"
+        ],
+        [
+          "do",
+          "Confirm org policy/resource ACL; request explicit grant; retry"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "Access granted; Finish"]
+      ],
+      "fail": [
+        [
+          "t",
+          "403 persists despite correct role on paper → policy guardrail/region restriction"
+        ],
+        [
+          "do",
+          "Escalate with resource ID, tenant, policy dump; propose alt resource/region"
+        ],
+        ["out", { "hand_off": "403_forbidden_persistent" }]
+      ]
+    }
+  },
+  "404": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "404 → not found; even though identifiers look correct, still missing"
+        ],
+        [
+          "do",
+          "List resources / search alt endpoints to confirm existence/rename"
+        ],
+        ["out", { "data": [{ "id": "found_replacement" }] }],
+        ["t", "Found correct resource; Finish"]
+      ],
+      "fail": [
+        ["t", "404 confirmed across listings → permanent missing"],
+        ["do", "Report deletion/migration; propose recreate or alternative"],
+        ["out", { "hand_off": "404_permanent" }]
+      ]
+    }
+  },
+  "408": {
+    "paths": {
+      "success": [
+        ["t", "Timeout; even though network seems fine, server is slow"],
+        ["do", "Retry with exponential backoff; increase timeout modestly"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed within extended timeout; Finish"]
+      ],
+      "fail": [
+        ["t", "Repeated 408 → upstream overload or network path issue"],
+        ["do", "Switch endpoint/region if available; otherwise defer & alert"],
+        ["out", { "hand_off": "408_persistent_timeout" }]
+      ]
+    }
+  },
+  "429": {
+    "paths": {
+      "success": [
+        ["t", "429 → rate limited"],
+        ["do", "Honor Retry-After/backoff; throttle concurrency; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Request accepted after throttling; Finish"]
+      ],
+      "fail": [
+        ["t", "429 persists → quota ceiling"],
+        ["do", "Queue work; reduce concurrency; request higher quota"],
+        ["out", { "hand_off": "429_quota_increase_needed" }]
+      ]
+    }
+  },
+  "500": {
+    "paths": {
+      "success": [
+        ["t", "500 → transient server error"],
+        ["do", "Retry with backoff (1s,2s,4s) x3"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded on retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Still 500 after backoff → outage/bug"],
+        ["do", "Check provider status; log; pause until healthy; notify user"],
+        ["out", { "hand_off": "provider_outage" }]
+      ]
+    }
+  },
+  "503": {
+    "paths": {
+      "success": [
+        ["t", "503 → service unavailable"],
+        ["do", "If Retry-After present, wait; else backoff and retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Service recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Prolonged 503"],
+        ["do", "Alert/deferr; notify user and monitor status"],
+        ["out", { "hand_off": "503_prolonged_unavailable" }]
+      ]
+    }
+  },
+  "502": {
+    "paths": {
+      "success": [
+        ["t", "502 → bad gateway; transient upstream glitch"],
+        ["do", "Brief wait then retry; consider alternate upstream"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded after retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Repeated 502 → upstream instability"],
+        ["do", "Fail over if possible; otherwise escalate"],
+        ["out", { "hand_off": "502_upstream_issue" }]
+      ]
+    }
+  },
+  "504": {
+    "paths": {
+      "success": [
+        ["t", "504 → gateway timeout"],
+        ["do", "Increase timeout slightly; retry; verify upstream health"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed after adjustment; Finish"]
+      ],
+      "fail": [
+        ["t", "Persistent 504"],
+        ["do", "Escalate to upstream owners; inform user"],
+        ["out", { "hand_off": "504_upstream_timeout" }]
+      ]
+    }
+  },
+  "505": {
+    "paths": {
+      "success": [
+        ["t", "505 → HTTP version unsupported"],
+        ["do", "Switch to supported version (HTTP/1.1 or HTTP/2)"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed with supported protocol; Finish"]
+      ],
+      "fail": [
+        ["t", "Protocol constraints cannot be met"],
+        ["do", "Document limitation; propose compatible client/server"],
+        ["out", { "hand_off": "505_incompatibility" }]
+      ]
+    }
+  },
+  "507": {
+    "paths": {
+      "success": [
+        ["t", "507 → insufficient storage"],
+        ["do", "Free space/rotate logs; retry write"],
+        ["out", { "status": "ok" }],
+        ["t", "Write succeeded post cleanup; Finish"]
+      ],
+      "fail": [
+        ["t", "Storage remains full"],
+        ["do", "Request expansion; pause writes"],
+        ["out", { "hand_off": "507_storage_full" }]
+      ]
+    }
+  },
+  "508": {
+    "paths": {
+      "success": [
+        ["t", "508 → loop detected"],
+        ["do", "Break cyclic reference; adjust traversal/links; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Loop resolved; Finish"]
+      ],
+      "fail": [
+        ["t", "Cannot break loop automatically"],
+        ["do", "Log full path/graph; assign manual fix"],
+        ["out", { "hand_off": "508_loop_persistent" }]
+      ]
+    }
+  },
+  "510": {
+    "paths": {
+      "success": [
+        ["t", "510 → extensions/headers required"],
+        ["do", "Add required options/headers per docs; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Accepted with extensions; Finish"]
+      ],
+      "fail": [
+        ["t", "Unknown extension requirement"],
+        ["do", "Escalate with server demand details"],
+        ["out", { "hand_off": "510_missing_extension_unknown" }]
+      ]
+    }
+  },
+  "511": {
+    "paths": {
+      "success": [
+        ["t", "511 → network auth required"],
+        ["do", "Complete captive portal/login; retry request"],
+        ["out", { "status": "ok" }],
+        ["t", "Network authenticated; Finish"]
+      ],
+      "fail": [
+        ["t", "Cannot complete network auth programmatically"],
+        ["do", "Ask user to authenticate; provide steps"],
+        ["out", { "hand_off": "511_user_network_auth_needed" }]
+      ]
+    }
+  },
+  "529": {
+    "paths": {
+      "success": [
+        ["t", "529 → site overloaded"],
+        ["do", "Backoff & jitter; spread requests; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed after load subsided; Finish"]
+      ],
+      "fail": [
+        ["t", "Sustained overload"],
+        ["do", "Defer/queue; notify user"],
+        ["out", { "hand_off": "529_overload_persistent" }]
+      ]
+    }
+  },
+  "530": {
+    "paths": {
+      "success": [
+        ["t", "530 → site/account frozen"],
+        ["do", "Notify owner; resolve billing/policy; retry once unfrozen"],
+        ["out", { "status": "ok" }],
+        ["t", "Unfrozen & processed; Finish"]
+      ],
+      "fail": [
+        ["t", "Freeze persists"],
+        ["do", "Provide support contact; pause job"],
+        ["out", { "hand_off": "530_frozen_account" }]
+      ]
+    }
+  },
+  "540": {
+    "paths": {
+      "success": [
+        ["t", "540 → endpoint temporarily disabled"],
+        ["do", "Log maintenance; retry after window"],
+        ["out", { "status": "ok" }],
+        ["t", "Service restored; Finish"]
+      ],
+      "fail": [
+        ["t", "Extended disablement"],
+        ["do", "Offer alternative flow; inform user"],
+        ["out", { "hand_off": "540_disabled_extended" }]
+      ]
+    }
+  },
+  "598": {
+    "paths": {
+      "success": [
+        ["t", "598 → proxy read timeout"],
+        ["do", "Increase timeout modestly; retry; verify network path"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed after tuning; Finish"]
+      ],
+      "fail": [
+        ["t", "Timeout persists via proxy"],
+        ["do", "Bypass/alternate proxy; escalate to netops"],
+        ["out", { "hand_off": "598_proxy_timeout" }]
+      ]
+    }
+  },
+  "599": {
+    "paths": {
+      "success": [
+        ["t", "599 → proxy connect timeout"],
+        ["do", "Retry with backoff; test connectivity; alternate route"],
+        ["out", { "status": "ok" }],
+        ["t", "Connected on retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Cannot connect via proxy"],
+        ["do", "Escalate to netops; suggest direct route if allowed"],
+        ["out", { "hand_off": "599_proxy_connect_fail" }]
+      ]
+    }
+  },
+  "421": {
+    "paths": {
+      "success": [
+        ["t", "421 → misdirected request"],
+        ["do", "Send to correct origin/host; verify routing"],
+        ["out", { "status": "ok" }],
+        ["t", "Routed correctly; Finish"]
+      ],
+      "fail": [
+        ["t", "Routing unresolved"],
+        ["do", "Escalate with host map and trace"],
+        ["out", { "hand_off": "421_routing_issue" }]
+      ]
+    }
+  },
+  "DNS Resolution Error": {
+    "paths": {
+      "success": [
+        ["t", "DNS resolution failed; even though domain looks correct"],
+        [
+          "do",
+          "Resolve a known public host to test DNS; flush/alternate resolver; retry"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "DNS healthy after switch; Finish"]
+      ],
+      "fail": [
+        ["t", "Custom domain still not resolving"],
+        ["do", "Escalate to infra; provide NS records and failure traces"],
+        ["out", { "hand_off": "dns_unresolved" }]
+      ]
+    }
+  },
+  "Malformed JSON": {
+    "paths": {
+      "success": [
+        ["t", "Server returned malformed JSON; might be transient"],
+        [
+          "do",
+          "Retry once; if still malformed, apply tolerant parse or fetch alt format if available"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "Parsed successfully; Finish"]
+      ],
+      "fail": [
+        ["t", "Response remains malformed"],
+        [
+          "do",
+          "Capture sample; notify API owner; fallback to cached/previous data"
+        ],
+        ["out", { "hand_off": "malformed_json_persistent" }]
+      ]
+    }
+  },
+  "JSON Schema Violation": {
+    "paths": {
+      "success": [
+        ["t", "Schema mismatch; even though types looked right"],
+        ["do", "Validate against schema; coerce/omit failing fields; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Accepted after correction; Finish"]
+      ],
+      "fail": [
+        ["t", "Violation originates server-side data"],
+        ["do", "Log failing fields; escalate to provider"],
+        ["out", { "hand_off": "schema_violation_server" }]
+      ]
+    }
+  },
+  "NoSuchToolError": {
+    "paths": {
+      "success": [
+        ["t", "Tried to call an unavailable tool"],
+        ["do", "Check registry; correct name or select supported alternative"],
+        ["out", { "status": "ok" }],
+        ["t", "Tool corrected; Finish"]
+      ],
+      "fail": [
+        ["t", "No equivalent tool available"],
+        ["do", "Report limitation; suggest manual step"],
+        ["out", { "hand_off": "no_such_tool" }]
+      ]
+    }
+  },
+  "InvalidToolArgumentsError": {
+    "paths": {
+      "success": [
+        ["t", "Tool args invalid; even though syntax looked fine"],
+        ["do", "Review spec; fix names/types; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Tool executed with corrected args; Finish"]
+      ],
+      "fail": [
+        ["t", "Argument contract unclear"],
+        ["do", "Request example call/spec update; escalate"],
+        ["out", { "hand_off": "invalid_args_unclear" }]
+      ]
+    }
+  },
+  "ToolExecutionError": {
+    "paths": {
+      "success": [
+        ["t", "Tool threw exception"],
+        [
+          "do",
+          "Capture stack/output; retry if transient; reset state if applicable"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "Recovered after reset/retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Deterministic tool failure"],
+        ["do", "Open issue with trace; propose alternative route"],
+        ["out", { "hand_off": "tool_execution_bug" }]
+      ]
+    }
+  },
+  "ToolCallRepairError": {
+    "paths": {
+      "success": [
+        ["t", "Automatic repair attempt failed"],
+        ["do", "Switch strategy: reset tool state or choose a different tool"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded after alternative; Finish"]
+      ],
+      "fail": [
+        ["t", "Alternate strategies exhausted"],
+        ["do", "Escalate with repair log"],
+        ["out", { "hand_off": "tool_repair_exhausted" }]
+      ]
+    }
+  },
+  "RuntimeError": {
+    "paths": {
+      "success": [
+        ["t", "Unexpected runtime error"],
+        ["do", "Inspect message; rollback recent change; reset state; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Runtime defect persists"],
+        ["do", "Log trace; pin to version; escalate"],
+        ["out", { "hand_off": "runtime_persistent" }]
+      ]
+    }
+  },
+  "DataError": {
+    "paths": {
+      "success": [
+        ["t", "Invalid/missing data"],
+        ["do", "Validate/clean; fill defaults; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed with corrected data; Finish"]
+      ],
+      "fail": [
+        ["t", "Data irreparable automatically"],
+        ["do", "Report missing fields; request source fix"],
+        ["out", { "hand_off": "data_source_issue" }]
+      ]
+    }
+  },
+  "ConnectionError": {
+    "paths": {
+      "success": [
+        ["t", "Network connection failed"],
+        ["do", "Test reachability; backoff; try alternate endpoint"],
+        ["out", { "status": "ok" }],
+        ["t", "Connected and retried; Finish"]
+      ],
+      "fail": [
+        ["t", "Connectivity remains down"],
+        ["do", "Escalate to networking; include traceroute/logs"],
+        ["out", { "hand_off": "network_down" }]
+      ]
+    }
+  },
+  "TypeError": {
+    "paths": {
+      "success": [
+        ["t", "Wrong types passed"],
+        ["do", "Check variable types; cast/convert; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded with correct types; Finish"]
+      ],
+      "fail": [
+        ["t", "Type source ambiguous"],
+        ["do", "Add validation at boundaries; escalate with sample payload"],
+        ["out", { "hand_off": "type_mismatch_root_unknown" }]
+      ]
+    }
+  },
+  "NullPointerException": {
+    "paths": {
+      "success": [
+        ["t", "Tried to use a null/None value"],
+        ["do", "Add null checks; ensure init before use; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "No longer null; Finish"]
+      ],
+      "fail": [
+        ["t", "Upstream provides null unavoidably"],
+        ["do", "Request upstream fix or guard with fallback"],
+        ["out", { "hand_off": "null_source_upstream" }]
+      ]
+    }
+  },
+  "IndexOutOfBoundsException": {
+    "paths": {
+      "success": [
+        ["t", "Index outside bounds"],
+        ["do", "Check lengths; clamp indices; adjust loops"],
+        ["out", { "status": "ok" }],
+        ["t", "Valid indices used; Finish"]
+      ],
+      "fail": [
+        ["t", "Data shape unpredictable"],
+        ["do", "Add defensive programming and skip invalid slices"],
+        ["out", { "hand_off": "index_out_of_bounds_persistent" }]
+      ]
+    }
+  },
+  "ClassCastException": {
+    "paths": {
+      "success": [
+        ["t", "Invalid cast between types"],
+        ["do", "Check actual types; use safe conversions; update logic"],
+        ["out", { "status": "ok" }],
+        ["t", "Corrected casting; Finish"]
+      ],
+      "fail": [
+        ["t", "Heterogeneous data prevents stable casting"],
+        ["do", "Normalize input schema; escalate to provider"],
+        ["out", { "hand_off": "class_cast_unstable" }]
+      ]
+    }
+  },
+  "StackOverflowError": {
+    "paths": {
+      "success": [
+        ["t", "Likely infinite/too-deep recursion"],
+        ["do", "Add base case; refactor to iteration; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "No overflow after refactor; Finish"]
+      ],
+      "fail": [
+        ["t", "Recursion required by algorithm & too deep"],
+        ["do", "Increase stack cautiously or batch work; escalate"],
+        ["out", { "hand_off": "stack_overflow_unavoidable" }]
+      ]
+    }
+  },
+  "OutOfMemoryError": {
+    "paths": {
+      "success": [
+        ["t", "Process exceeded memory"],
+        ["do", "Free caches; stream/chunk data; reduce batch size"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed within memory budget; Finish"]
+      ],
+      "fail": [
+        ["t", "Memory pressure persists"],
+        ["do", "Add paging/out-of-core; request more RAM"],
+        ["out", { "hand_off": "oom_requires_resources" }]
+      ]
+    }
+  },
+  "ResourceLimitExceeded": {
+    "paths": {
+      "success": [
+        ["t", "Agent hit resource limits"],
+        ["do", "Pause; reduce load; retry after reset"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded post-pause; Finish"]
+      ],
+      "fail": [
+        ["t", "Hard limit prevents progress"],
+        ["do", "Request quota increase; reschedule"],
+        ["out", { "hand_off": "resource_limit_hard" }]
+      ]
+    }
+  },
+  "QuotaExceeded": {
+    "paths": {
+      "success": [
+        ["t", "Daily/monthly quota exceeded"],
+        ["do", "Wait for reset or purchase higher tier; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed after quota reset; Finish"]
+      ],
+      "fail": [
+        ["t", "Quota cannot be increased now"],
+        ["do", "Throttle workload; partial completion plan"],
+        ["out", { "hand_off": "quota_blocker" }]
+      ]
+    }
+  },
+  "RateLimitExceeded": {
+    "paths": {
+      "success": [
+        ["t", "Too many requests per window"],
+        ["do", "Reduce QPS; add client-side rate limiter; retry later"],
+        ["out", { "status": "ok" }],
+        ["t", "Stable under new rate; Finish"]
+      ],
+      "fail": [
+        ["t", "Provider enforces stricter limits than required"],
+        ["do", "Batch/queue; request policy exemption"],
+        ["out", { "hand_off": "ratelimit_policy" }]
+      ]
+    }
+  },
+  "PermissionDeniedError": {
+    "paths": {
+      "success": [
+        ["t", "Insufficient permissions"],
+        ["do", "Request/adjust ACL; use alternative path; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Access granted or alternate succeeded; Finish"]
+      ],
+      "fail": [
+        ["t", "Access cannot be granted automatically"],
+        ["do", "Provide instructions to owner/admin"],
+        ["out", { "hand_off": "permission_block" }]
+      ]
+    }
+  },
+  "CertificateError": {
+    "paths": {
+      "success": [
+        ["t", "TLS certificate issue"],
+        ["do", "Check hostname/expiry/CA trust; correct URL or trust store"],
+        ["out", { "status": "ok" }],
+        ["t", "Secure connection established; Finish"]
+      ],
+      "fail": [
+        ["t", "Enterprise cert policy blocks connection"],
+        ["do", "Escalate to security; obtain proper CA bundle"],
+        ["out", { "hand_off": "certificate_policy_block" }]
+      ]
+    }
+  },
+  "ModuleNotFoundError": {
+    "paths": {
+      "success": [
+        ["t", "Required module missing"],
+        ["do", "Install/upgrade dependency; fix sys.path; retry import"],
+        ["out", { "status": "ok" }],
+        ["t", "Module imported; Finish"]
+      ],
+      "fail": [
+        ["t", "Environment cannot install dependency"],
+        ["do", "Provide alternative implementation or vendor build"],
+        ["out", { "hand_off": "module_unavailable" }]
+      ]
+    }
+  },
+  "ImportError": {
+    "paths": {
+      "success": [
+        ["t", "Import failed (name/path)"],
+        ["do", "Check spelling/version; correct import path/syntax"],
+        ["out", { "status": "ok" }],
+        ["t", "Import corrected; Finish"]
+      ],
+      "fail": [
+        ["t", "Package broken/incompatible"],
+        ["do", "Pin to working version; file bug"],
+        ["out", { "hand_off": "import_incompatibility" }]
+      ]
+    }
+  },
+  "AttributeError": {
+    "paths": {
+      "success": [
+        ["t", "Missing attribute/method"],
+        ["do", "Verify object type/API; adjust usage"],
+        ["out", { "status": "ok" }],
+        ["t", "Attribute access corrected; Finish"]
+      ],
+      "fail": [
+        ["t", "Version drift changed API"],
+        ["do", "Add compatibility shim; escalate doc update"],
+        ["out", { "hand_off": "attribute_removed" }]
+      ]
+    }
+  },
+  "KeyError": {
+    "paths": {
+      "success": [
+        ["t", "Missing dict key"],
+        ["do", "Check existence; provide defaults; validate upstream data"],
+        ["out", { "status": "ok" }],
+        ["t", "Handled missing keys; Finish"]
+      ],
+      "fail": [
+        ["t", "Upstream keeps omitting required keys"],
+        ["do", "Request schema fix; add fallback mapping"],
+        ["out", { "hand_off": "missing_keys_upstream" }]
+      ]
+    }
+  },
+  "ValueError": {
+    "paths": {
+      "success": [
+        ["t", "Bad value within valid type"],
+        ["do", "Validate ranges/enums; correct and retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Accepted with valid value; Finish"]
+      ],
+      "fail": [
+        ["t", "Constraints unknown/undocumented"],
+        ["do", "Infer via probing; if uncertain, escalate for spec"],
+        ["out", { "hand_off": "value_constraints_unknown" }]
+      ]
+    }
+  },
+  "FileNotFoundError": {
+    "paths": {
+      "success": [
+        ["t", "Referenced path not found"],
+        ["do", "Verify path; create/restore file; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "File operation succeeded; Finish"]
+      ],
+      "fail": [
+        ["t", "File genuinely missing and cannot be recreated"],
+        ["do", "Notify owner; propose alternative input"],
+        ["out", { "hand_off": "file_missing_unrecoverable" }]
+      ]
+    }
+  },
+  "IOError": {
+    "paths": {
+      "success": [
+        ["t", "I/O failure reading/writing"],
+        ["do", "Verify device readiness; retry; use fallback path"],
+        ["out", { "status": "ok" }],
+        ["t", "I/O recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Underlying device unreliable"],
+        ["do", "Escalate to ops; switch storage"],
+        ["out", { "hand_off": "io_device_issue" }]
+      ]
+    }
+  },
+  "UncaughtException": {
+    "paths": {
+      "success": [
+        ["t", "Exception bubbled without handler"],
+        ["do", "Add try/except around risky call; log; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Error handled gracefully; Finish"]
+      ],
+      "fail": [
+        ["t", "Root cause unknown"],
+        ["do", "Collect repro steps & stack trace; escalate"],
+        ["out", { "hand_off": "uncaught_exception_analysis" }]
+      ]
+    }
+  },
+  "AuthenticationTimeout": {
+    "paths": {
+      "success": [
+        ["t", "Auth flow exceeded time; even though creds valid"],
+        ["do", "Increase timeout/backoff; try alternate auth endpoint"],
+        ["out", { "status": "ok" }],
+        ["t", "Authenticated within new window; Finish"]
+      ],
+      "fail": [
+        ["t", "Auth system degraded"],
+        ["do", "Inform user; retry later; monitor"],
+        ["out", { "hand_off": "auth_timeout_persistent" }]
+      ]
+    }
+  },
+  "WritePermissionError": {
+    "paths": {
+      "success": [
+        ["t", "No rights to write target"],
+        ["do", "Request permission or choose writable location; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Write succeeded; Finish"]
+      ],
+      "fail": [
+        ["t", "Policy forbids write"],
+        ["do", "Provide export to allowed location"],
+        ["out", { "hand_off": "write_permission_policy" }]
+      ]
+    }
+  },
+  "ReadError": {
+    "paths": {
+      "success": [
+        ["t", "Failed to read file/stream"],
+        ["do", "Retry with correction; open backup/replica"],
+        ["out", { "status": "ok" }],
+        ["t", "Read recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Source corrupted/unavailable"],
+        ["do", "Notify data owner; restore from backup"],
+        ["out", { "hand_off": "read_source_corrupt" }]
+      ]
+    }
+  },
+  "BrokenPipeError": {
+    "paths": {
+      "success": [
+        ["t", "Connection closed mid-transfer"],
+        ["do", "Re-establish connection; resume safely"],
+        ["out", { "status": "ok" }],
+        ["t", "Transfer completed; Finish"]
+      ],
+      "fail": [
+        ["t", "Repeated pipe breaks"],
+        ["do", "Throttle/buffer; escalate network stability issue"],
+        ["out", { "hand_off": "broken_pipe_persistent" }]
+      ]
+    }
+  },
+  "BadGatewayError": {
+    "paths": {
+      "success": [
+        ["t", "Gateway returned invalid upstream response"],
+        ["do", "Retry or failover; verify upstream status"],
+        ["out", { "status": "ok" }],
+        ["t", "Gateway healthy; Finish"]
+      ],
+      "fail": [
+        ["t", "Gateway keeps failing"],
+        ["do", "Provide alt route; escalate to upstream"],
+        ["out", { "hand_off": "bad_gateway_persistent" }]
+      ]
+    }
+  },
+  "ParseError": {
+    "paths": {
+      "success": [
+        ["t", "Could not parse server data"],
+        ["do", "Adjust parser; attempt tolerant parse; request alt format"],
+        ["out", { "status": "ok" }],
+        ["t", "Parsed with adjustments; Finish"]
+      ],
+      "fail": [
+        ["t", "Format incompatible"],
+        ["do", "Request spec or exporter fix; fallback summary"],
+        ["out", { "hand_off": "parse_incompatible" }]
+      ]
+    }
+  },
+  "InvalidContentType": {
+    "paths": {
+      "success": [
+        ["t", "Unexpected content type received"],
+        ["do", "Negotiate/ask for supported type; adjust handler"],
+        ["out", { "status": "ok" }],
+        ["t", "Handled correct type; Finish"]
+      ],
+      "fail": [
+        ["t", "Provider cannot serve compatible type"],
+        ["do", "Convert via proxy/transformer; or escalate"],
+        ["out", { "hand_off": "content_type_incompatible" }]
+      ]
+    }
+  },
+  "ServiceDependencyFailure": {
+    "paths": {
+      "success": [
+        ["t", "Upstream dependency failed"],
+        ["do", "Identify failing service; wait until healthy; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Resumed after dependency recovery; Finish"]
+      ],
+      "fail": [
+        ["t", "Dependency outage ongoing"],
+        ["do", "Queue work; notify stakeholders"],
+        ["out", { "hand_off": "dependency_outage" }]
+      ]
+    }
+  }
 }
 
 def cut_system_message(system_message):
@@ -1246,7 +1013,8 @@ Your job is to respond to tool call failures with a structured recovery plan and
 You will be given:""")
     
     # Part 2: Context information
-    prompt_parts.append(f"""- The failure type and general recovery protocols: {failure_type} in {recovery_paths_str}
+    prompt_parts.append(f"""- The failure type and general recovery protocols: {failure_type} in {recovery_paths_str} Legend for compact flows: "t"=Thought, "do"=Action, "out"=Function Output.
+Treat flows as reference only; adjust freely per signals and tool specs.
 - Task context: {task_context}
 - Tool descriptions: {tools_context}
 - Recent conversation history: {conversation_context}
@@ -1274,51 +1042,14 @@ You will be given:""")
 - If the issue is truly unsolvable, send an `"Unable to solve"` message explaining why.
 
 ---
+## Behavioral rules (soft constraints):
 
-## Output Examples
-
-### Example 1 — Single Recovery Then Success
-"from": "assistant",
-"value": "Recovery: Thought: The API call failed due to a timeout. I will retry with a smaller dataset to speed up the response.\\nAction: get_data\\nAction Input: {{\"dataset_id\": 42, \"limit\": 100}}",
-
-"from": "function",
-"value": "{{\"data\": [ ... ]}}",
-
-"from": "assistant",
-"value": "Thought: I have retrieved the required data successfully.\\nAction: Finish\\nAction Input: {{}}",
-
----
-
-### Example 2 — Multiple Recovery Attempts
-"from": "assistant",
-"value": "Recovery: Thought: The request failed with a 404 Not Found. I will adjust the endpoint to use the correct resource ID.\\nAction: fetch_user\\nAction Input: {{\"user_id\": 12345}}",
-
-"from": "function",
-"value": "{{\"error\": \"User not found\"}}",
-
-"from": "assistant",
-"value": "Recovery: Thought: The ID still appears invalid. I will search for the correct ID using the username.\\nAction: find_user_by_name\\nAction Input: {{\"username\": \"johndoe\"}}",
-
-"from": "function",
-"value": "{{\"user_id\": 67890}}",
-
-"from": "assistant",
-"value": "Recovery: Thought: Now that I have the correct ID, I will retry the fetch.\\nAction: fetch_user\\nAction Input: {{\"user_id\": 67890}}",
-
-"from": "function",
-"value": "{{\"name\": \"John Doe\", \"email\": \"john@example.com\"}}",
-
-"from": "assistant",
-"value": "Thought: I have retrieved the user details successfully.\\nAction: Finish\\nAction Input: {{}}",
-
----
-
-### Example 3 — Unsolvable
-"from": "assistant",
-"value": "Recovery: Thought: The API endpoint has been deprecated and no alternative is available.\\nAction: none\\nAction Input: {{}}",
-
-"from": "assistant",
-"value": "Unable to solve: No valid recovery action exists for this tool in the current environment."
+- Do not follow steps mechanically. Skip, reorder, merge, or add steps as needed based on live signals (error text, tool output, state).
+- Prefer signal‑driven reasoning over playbook order. If a later step is clearly the right next move, jump to it.
+- You may introduce new actions not listed in the flow if they are logically necessary and supported by the tools.
+- If the flow’s guidance conflicts with tool specs or observed outputs, ignore the flow and do what’s correct.
+- You can terminate early if success is achieved, or escalate early if continued retries are irrational.
+- When you deviate, state the reason briefly in the Thought (e.g., “Even though the playbook suggests header checks, the message shows invalid enum → jumping to schema fix.”).
 
 ---
 
@@ -1331,19 +1062,14 @@ You will be given:""")
 ### Few-Shot Example 1 — Multiple Recovery Attempts Then Unable to Solve 
 
 # Step 1: Initial recovery attempt after first failure. 
-# Reason: The first API call returned an error suggesting a possible formatting issue with the username. 
-# Action: Retry after trimming whitespace and converting to lowercase, as some APIs are case/whitespace sensitive.
 "from": "assistant",
 "value": "Recovery: Thought: The initial API call to retrieve Instagram user info for 'nike' failed, likely with a 400 Bad Request. I will trim whitespace, ensure the username is lowercase, and confirm the endpoint is correct.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"nike\"}}",
 
 # Step 1 result: API still rejects the request with an error about the username parameter. 
-# This indicates trimming/lowercasing did not fix the problem.
 "from": "function",
 "value": "{{\"error\": {{\"code\": 400, \"message\": \"Bad Request: Invalid or missing username parameter.\", \"details\": \"Username parameter did not match any user in our records.\"}}}},",
 
 # Step 2: Second recovery attempt. 
-# Reason: The username looks correct, so the failure may be due to missing headers required by the API.
-# Action: Include 'Content-Type: application/json' header to ensure proper request format.
 "from": "assistant",
 "value": "Recovery: Thought: The username parameter appears valid based on the schema. The issue may be missing required headers. I will include a Content-Type header set to 'application/json'.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"nike\", \"headers\": {{\"Content-Type\": \"application/json\"}}}}",
 
@@ -1353,8 +1079,7 @@ You will be given:""")
 "value": "{{\"error\": {{\"code\": 400, \"message\": \"Bad Request: Invalid or missing username parameter.\", \"details\": \"API requires additional request headers or authentication.\"}}}}",
 
 # Step 3: Third recovery attempt. 
-# Reason: The request structure and headers appear correct. The error could be caused by unexpected or extra fields in the payload.
-# Action: Send a minimal JSON payload with only the required 'username' field.
+
 "from": "assistant",
 "value": "Recovery: Thought: The request structure and headers are correct. I will send a minimal, well-formed JSON payload with only the username field.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"nike\"}}",
 
@@ -1363,8 +1088,6 @@ You will be given:""")
 "value": "{{\"error\": {{\"code\": 400, \"message\": \"Bad Request: Invalid or missing username parameter.\", \"details\": \"Username format not accepted by this endpoint.\"}}}}",
 
 # Step 4: Fourth recovery attempt. 
-# Reason: To confirm whether the API itself is working or if the issue is specific to 'nike', test with a known-good username.
-# Action: Use 'instagram' as a control test case.
 "from": "assistant",
 "value": "Recovery: Thought: All structural checks have failed. I will test with a known-good username 'instagram' to verify the endpoint.\\nAction: userinfo_for_instagram_cheapest\\nAction Input: {{\"username\": \"instagram\"}}",
 
@@ -1373,8 +1096,6 @@ You will be given:""")
 "value": "{{\"data\": {{\"user_id\": \"25025320\", \"username\": \"instagram\", \"full_name\": \"Instagram\", \"bio\": \"Discovering — and telling — stories from around the world. Curated by Instagram's community team.\", \"profile_pic_url\": \"https://instagram.com/profile_pic.jpg\", \"followers\": 500000000, \"following\": 200, \"is_verified\": true}}}}",
 
 # Step 5: Conclusion. 
-# Reason: The API works for 'instagram' but not for 'nike', indicating 'nike' may be restricted, private, or inaccessible via this API.
-# Action: End with a Finish step, informing the user that the task cannot be completed for 'nike' but the API is working.
 "from": "assistant",
 "value": "The API works with the username 'instagram', so the endpoint is functional. The repeated 400 errors for 'nike' suggest that either the username 'nike' is not available via this API, is restricted, or the API has a limitation on certain high-profile accounts. Since all recovery steps have been exhausted, I will escalate and inform the user that data for 'nike' cannot be retrieved at this time, but the API works for other usernames like 'instagram'.\\nAction: Finish\\nAction Input:{{\"status\": \"failed\", \"reason\": \"Unable to retrieve data for 'nike' after multiple recovery attempts\", \"next_step\": \"Contact API provider or try a different username\"}}"
 
@@ -1383,39 +1104,35 @@ You will be given:""")
 ---
 ### Few Shot Example 2 — Incorrect Input Scope Fixed by State-Level Tool Usage
 
-// Reason: User asked for half-staff events in New York and current flag status in West Virginia.
-// Action: First attempt uses 'US' code to try to get half-staff info, assuming it covers NY.
+
 "from": "assistant",
 "value": "Thought: The user wants to know half-staff events in New York and the current flag status in West Virginia. I will start by querying US-wide half-staff events.\\nAction: get_half_staff_events_for_given_flag_for_flag_status\\nAction Input: {{\"code\": \"US\"}}",
 
-// Result: Function runs, returns full JSON of US event info — valid but possibly not NY-specific.
+
 "from": "function",
 "value": {{\"error\": \"\", \"response\": \"[{{\'flag\': \'US\', \'issued_by\': \'President\', \'date_issued\': \'2023-01-21\', \'date_start\': \'2023-01-22\', \'date_end\': \'2023-01-26\', \'title\': \'As a mark of respect...\', \'description\': \'...\']\"}},
 
-// Result: Function system unexpectedly returns "unknown" (maybe internal error or fallback)
+
 "from": "function",
 "value": "\"unknown\"",
 
-// Reason: Recovery triggered due to malformed or overly broad input.
-// Action: Adjust tool input to use correct state-level code ('NY' instead of 'US').
+
 "from": "assistant",
 "value": "Recovery: Thought: The request failed because I used 'US' instead of the correct state code 'NY'. I will correct the flag code to 'NY' and retry.\\nAction: get_half_staff_events_for_given_flag_for_flag_status\\nAction Input: {{\"code\": \"NY\"}}",
 
-// Result: Recovery successful — gets the correct NY state events.
+
 "from": "function",
 "value": {{\"data\": [{{\"event_id\": \"20240601NY\", \"start_date\": \"2024-06-01\", \"end_date\": \"2024-06-02\", \"reason\": \"In honor of Memorial Day\", \"location\": \"Statewide\"}}, {{\"event_id\": \"20240615NY\", \"start_date\": \"2024-06-15\", \"end_date\": \"2024-06-15\", \"reason\": \"In memory of fallen officers\", \"location\": \"Statewide\"}}] }},
 
-// Reason: Next, fulfill second part of user query — WV flag status.
-// Action: Query tool with state code 'WV'.
+
 "from": "assistant",
 "value": "Recovery: Thought: I have successfully retrieved half-staff events for NY. Now I will get the current flag status for West Virginia using code 'WV'.\\nAction: get_half_staff_events_for_given_flag_for_flag_status\\nAction Input: {{\"code\": \"WV\"}}",
 
-// Result: WV status successfully retrieved.
+
 "from": "function",
 "value": {{\"status\": \"full-staff\", \"last_changed\": \"2024-05-20T08:00:00Z\", \"location\": \"West Virginia\"}},
 
-// Reason: All sub-tasks complete — proceed to final assistant wrap-up.
-// Action: Provide user with event data and WV status summary.
+
 "from": "assistant",
 "value": "Thought: I have all the information. There are two half-staff events in NY, and the flag in WV is currently at full-staff.\\nAction: Finish\\nAction Input: {{\"half_staff_events\": [\"June 1–2, 2024: In honor of Memorial Day\", \"June 15, 2024: In memory of fallen officers\"], \"flag_status_WV\": \"full-staff as of May 20, 2024\"}}"
 
@@ -1424,60 +1141,52 @@ You will be given:""")
 ---
 
 ### Few Shot Example 3 -  Timeout Recovery with Billboard Tool Switch & Multi-Tool Completion (still idetified error despite false unknown)
-// Reason: User asked for top 10 alternative songs and SoundCloud data related to "Almost Lover".
-// Action: Attempt to retrieve chart data using Greece endpoint with 'all-time' range.
+
 "from": "user",
 "value": "\\nHelp me discover new music from different genres. Provide the top 10 alternative songs of all time. Also, search for tracks related to the song 'Almost Lover' and give me the basic information and comments for a specific song on Soundcloud.\\nBegin!\\n",
 
 "from": "assistant",
 "value": "Thought: The user asked for the top 10 alternative songs and SoundCloud details for 'Almost Lover'. I will start by calling the Greece Billboard API using range 'all-time'.\\nAction: greece_songs_for_billboard_api\\nAction Input: {{\"range\": \"all-time\", \"date\": \"2021-08-01\"}}",
 
-// Result: Function call fails with a timeout.
+
 "from": "function",
 "value": "{{\"error\": \"Timeout error...HTTPConnectionPool(host='47.251.13.204', port=8080): Read timed out. (read timeout=10)\\", \"response\": \"\"}}",
 
-// Result: System returns 'unknown' placeholder.
+
 "from": "function",
 "value": "\"unknown\"",
 
-// Reason: Recovery triggered due to timeout failure (408).
-// Action: Retry same call with longer timeout window.
+
 "from": "assistant",
 "value": "Recovery: Thought: The API call failed due to a timeout, which suggests a network delay or server overload. I will retry the request with an increased timeout to allow more time for the server to respond.\\nAction: greece_songs_for_billboard_api\\nAction Input: {{\"range\": \"all-time\", \"date\": \"2021-08-01\", \"timeout\": 20}}",
 
-// Result: Second timeout failure.
+
 "from": "function",
 "value": "{{\"error\": \"Timeout error...HTTPConnectionPool(host='47.251.13.204', port=8080): Read timed out. (read timeout=20)\\", \"response\": \"\"}}",
 
-// Reason: Persistent timeout suggests endpoint is unstable or blocked.
-// Action: Switch to a more reliable alternative-specific Billboard API.
+
 "from": "assistant",
 "value": "Recovery: Thought: The increased timeout did not resolve the issue, indicating a persistent network or server problem. I will attempt to access the alternative songs using the 'alternative_songs_for_billboard_api' function, which may provide the required information without the need for a specific date.\\nAction: alternative_songs_for_billboard_api\\nAction Input: {{}}",
 
-// Result: Alternative songs successfully retrieved.
+
 "from": "function",
 "value": "{{\"data\": [{{\"rank\": 1, \"title\": \"Smells Like Teen Spirit\", \"artist\": \"Nirvana\"}}, {{\"rank\": 2, \"title\": \"Under the Bridge\", \"artist\": \"Red Hot Chili Peppers\"}}, {{\"rank\": 3, \"title\": \"Creep\", \"artist\": \"Radiohead\"}}, {{\"rank\": 4, \"title\": \"Losing My Religion\", \"artist\": \"R.E.M.\"}}, {{\"rank\": 5, \"title\": \"Wonderwall\", \"artist\": \"Oasis\"}}, {{\"rank\": 6, \"title\": \"Black Hole Sun\", \"artist\": \"Soundgarden\"}}, {{\"rank\": 7, \"title\": \"Jeremy\", \"artist\": \"Pearl Jam\"}}, {{\"rank\": 8, \"title\": \"Come As You Are\", \"artist\": \"Nirvana\"}}, {{\"rank\": 9, \"title\": \"Zombie\", \"artist\": \"The Cranberries\"}}, {{\"rank\": 10, \"title\": \"Basket Case\", \"artist\": \"Green Day\"}}]}}",
 
-// Reason: Billboard task is now complete.
-// Action: Proceed to search for 'Almost Lover' on SoundCloud.
+
 "from": "assistant",
 "value": "Recovery: Thought: I have successfully retrieved the top 10 alternative songs of all time. Now, I will proceed to search for tracks related to 'Almost Lover' on Soundcloud.\\nAction: search_for_soundcloud\\nAction Input: {{\"type\": \"track\", \"query\": \"Almost Lover\"}}",
 
-// Result: SoundCloud tracks returned.
+
 "from": "function",
 "value": "{{\"tracks\": [{{\"title\": \"Almost Lover\", \"artist\": \"A Fine Frenzy\", \"url\": \"https://soundcloud.com/afinefrenzy/almost-lover\"}}, {{\"title\": \"Almost Lover (Cover)\", \"artist\": \"John Doe\", \"url\": \"https://soundcloud.com/johndoe/almost-lover-cover\"}}]}}",
 
-// Reason: Need to get more details for the original 'Almost Lover' track.
-// Action: Query SoundCloud for track info and comments.
 "from": "assistant",
 "value": "Recovery: Thought: I have found tracks related to 'Almost Lover'. I will now retrieve basic information and comments for the specific song by A Fine Frenzy.\\nAction: song_info_for_soundcloud\\nAction Input: {{\"track_url\": \"https://soundcloud.com/afinefrenzy/almost-lover\"}}",
 
-// Result: Song info and user comments successfully retrieved.
+
 "from": "function",
 "value": "{{\"title\": \"Almost Lover\", \"artist\": \"A Fine Frenzy\", \"comments\": [{{\"user\": \"musicfan123\", \"comment\": \"This song always makes me emotional.\"}}, {{\"user\": \"loverofmusic\", \"comment\": \"Beautiful lyrics and melody.\"}}]}}",
 
-// Reason: All subtasks complete.
-// Action: Summarize song results and end task.
 "from": "assistant",
 "value": "Thought: I have gathered all the necessary information. Here are the top 10 alternative songs and the SoundCloud info for 'Almost Lover'. Let me know if you'd like more recommendations! \\nAction: Finish\\nAction Input: {{\"status\": \"complete\", \"top_alternative_songs_count\": 10, \"soundcloud_track\": \"Almost Lover by A Fine Frenzy\"}}"
 
@@ -1487,60 +1196,50 @@ You will be given:""")
 
 ###Few Shot Example 4 - [Bad Schema] YouTube Playlist Creation Recovery
 
-# Reason: User asked to search YouTube for movie trailers, build a playlist, and retrieve its details.
-# Action: Assistant initiates search using YouTube v3 search API.
 "from": "user",
 "value": "\\nI'm planning a movie night and would like to create a playlist of YouTube videos. Search for 'movie trailers' on YouTube and retrieve the search results, including snippets and IDs. Then, fetch the videos from the search results and add them to a playlist. Provide the playlist details, including the snippets.\\nBegin!\\n",
 
 "from": "assistant",
 "value": "Thought: I will begin by searching for 'movie trailers' using the YouTube search API.\\nAction: search_for_youtube_v3_v2\\nAction Input: {{\"part\": \"snippet\", \"q\": \"movie trailers\", \"maxresults\": 10}}",
 
-# Result: Video search successful.
 "from": "function",
 "value": {{\"error\": \"\", \"response\": \"{{\\\"items\\\": [{{\\\"id\\\": {{\\\"videoId\\\": \\\\\"bSD8a_Ptkds\\\\"}}}}, {{\\\"id\\\": {{\\\"videoId\\\": \\\\\"anotherVideoId1\\\\"}}}}, {{\\\"id\\\": {{\\\"videoId\\\": \\\\\"anotherVideoId2\\\\"}}}}]}}\"}},
 
-# Reason: Assistant attempts to get playlist details prematurely, with a malformed schema.
-# Action: Makes an invalid call missing required filter field like `id`, `mine`, or `channelId`.
+
 "from": "assistant",
 "value": "Thought: I have the search results. I will now try to get playlist details.\\nAction: playlist_details_for_youtube_v3_v2\\nAction Input: {{\"is_id\": \"\", \"part\": \"snippet\"}}",
 
-# Result: Tool fails due to missing required parameter (bad schema).
+
 "from": "function",
 "value": {{\"error\": \"Message error...\", \"response\": \"{{\\\"error\\\": {{\\\"code\\\": 400, \\\\\"message\\\": \\\\\"No filter selected. Expected one of: channelId, mine, id\\\\"}}}}\"}},
 
-# Result: Tool reports HTTP 400 error.
+
 "from": "function",
 "value": "\\"400\\"",
 
-# Reason: Assistant recognizes bad schema input.
-# Action: Creates a new playlist to obtain valid ID.
+
 "from": "assistant",
 "value": "Recovery: Thought: The error occurred because I failed to specify a required identifier. I will create a playlist to obtain a valid playlist ID.\\nAction: create_playlist_for_youtube_v3_v2\\nAction Input: {{\"title\": \"Movie Trailers Playlist\", \"description\": \"A playlist of movie trailers for movie night.\", \"privacyStatus\": \"public\"}}",
 
-# Result: Playlist created successfully.
+
 "from": "function",
 "value": {{\"playlistId\": \"PL1234567890abcdef\"}},
 
-# Reason: Assistant can now proceed with video upload.
-# Action: Adds previously retrieved videos to the new playlist.
+
 "from": "assistant",
 "value": "Recovery: Thought: I now have a playlist ID. I will add the videos to this playlist.\\nAction: add_videos_to_playlist_for_youtube_v3_v2\\nAction Input: {{\"playlistId\": \"PL1234567890abcdef\", \"videoIds\": [\"bSD8a_Ptkds\", \"anotherVideoId1\", \"anotherVideoId2\"]}}",
 
-# Result: Videos added successfully.
 "from": "function",
 "value": {{\"status\": \"success\", \"message\": \"Videos added to playlist successfully.\"}},
 
-# Reason: Ready to retry failed playlist details call with valid ID.
-# Action: Fetch playlist details for user.
+
 "from": "assistant",
 "value": "Recovery: Thought: The videos have been added. Now I will retrieve the playlist details using the valid playlist ID.\\nAction: playlist_details_for_youtube_v3_v2\\nAction Input: {{\"is_id\": \"PL1234567890abcdef\", \"part\": \"snippet\"}}",
 
-# Result: Playlist info returned successfully.
+
 "from": "function",
 "value": {{\"items\": [{{\"snippet\": {{\"title\": \"Movie Trailers Playlist\", \"description\": \"A playlist of movie trailers for movie night.\", \"thumbnails\": {{\"default\": {{\"url\": \"https://example.com/thumbnail.jpg\"}}}}}}}}]}},
 
-# Reason: All subtasks are complete.
-# Action: Assistant summarizes and finishes.
 "from": "assistant",
 "value": "Thought: I have successfully created the playlist and retrieved its details.\\nAction: Finish\\nAction Input: {{\"return_type\": \"give_answer\", \"final_answer\": \"The playlist 'Movie Trailers Playlist' has been created and populated with movie trailers. You can view it with the following details: Title: Movie Trailers Playlist, Description: A playlist of movie trailers for movie night, Thumbnail: https://example.com/thumbnail.jpg.\"}}"
 
@@ -1548,58 +1247,42 @@ You will be given:""")
 
 --- 
 ### Few Shot Example 5 - auth/header recovery pattern
-// Reason: User asked for geocoordinates of NYC landmarks and nearby hotels.
-// Action: Assistant initiates call to geocode Times Square using OpenCage API.
+
 "from": "user",
 "value": "\\nI'm a travel blogger and I'm planning to write an article about the top tourist attractions in New York City. Can you provide me with the geocoordinates for Times Square, Central Park, and the Statue of Liberty? Also, recommend some nearby hotels for tourists.\\nBegin!\\n",
 
-// Reason: Begin with first location — Times Square.
-// Action: Call geocode tool with new API key.
+
 "from": "assistant",
 "value": "Thought: I will begin by retrieving the coordinates for Times Square using OpenCage geocoder.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Times Square, New York City\", \"key\": \"new-opencage-api-key\"}}",
 
-// Reason: API call failed — unauthorized.
-// Action: Return error response indicating invalid API key.
+
 "from": "function",
 "value": {{\"error\": \"\", \"response\": \"{'status': {'code': 401, 'message': 'invalid API key'}, 'results': []}\"}},
 
-// Reason: Internal system surfaced error code 401.
-// Action: Return system-recognized HTTP code.
+
 "from": "function",
 "value": "\\"401\\"",
 
-// Reason: Recovery triggered due to 401 Unauthorized.
-// Action: Retry with a corrected API key.
+
 "from": "assistant",
 "value": "Recovery: Thought: The 401 Unauthorized error suggests the API key is invalid. I will retry with a corrected OpenCage API key.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Times Square, New York City\", \"key\": \"corrected-opencage-api-key\"}}",
 
-// Reason: Correct API key used — request succeeds.
-// Action: Return Times Square coordinates.
+
 "from": "function",
 "value": {{\"response\": \"{'results': [{'geometry': {'lat': 40.758, 'lng': -73.9855}}], 'status': {'code': 200}}\"}},
 
-// Reason: Proceed to fetch Central Park coordinates.
-// Action: Make request for Central Park using same valid API key.
 "from": "assistant",
 "value": "Recovery: Thought: Successfully retrieved Times Square coordinates. Now fetching coordinates for Central Park.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Central Park, New York City\", \"key\": \"corrected-opencage-api-key\"}}",
 
-// Reason: Valid key used — Central Park coordinates retrieved.
-// Action: Return success response.
 "from": "function",
 "value": {{\"response\": \"{'results': [{'geometry': {'lat': 40.785091, 'lng': -73.968285}}], 'status': {'code': 200}}\"}},
 
-// Reason: Proceed to third landmark — Statue of Liberty.
-// Action: Request geocoordinates for Statue of Liberty.
 "from": "assistant",
 "value": "Recovery: Thought: Central Park coordinates retrieved. Proceeding with Statue of Liberty.\\nAction: geocode_v1_json_for_opencage_geocoder\\nAction Input: {{\"q\": \"Statue of Liberty, New York City\", \"key\": \"corrected-opencage-api-key\"}}",
 
-// Reason: Final location processed — all geocoordinates collected.
-// Action: Return Statue of Liberty data.
 "from": "function",
 "value": {{\"response\": \"{'results': [{'geometry': {'lat': 40.689247, 'lng': -74.044502}}], 'status': {'code': 200}}\"}},
 
-// Reason: Now transition to hotel search using retrieved coordinates.
-// Action: Call hotel search tool using Times Square location.
 "from": "assistant",
 "value": "Thought: I have all the coordinates. Next, I will search for hotels near Times Square.\\nAction: search_places_for_spott\\nAction Input: {{\"query\": \"hotels\", \"location\": \"40.758,-73.9855\"}}"
 
@@ -1613,42 +1296,30 @@ You will be given:""")
 ---
 ### Few Shot Example 6 - Unknown Error Recovery: Discovering Valid Ruleset for Spellout
 
-// Reason: User asked to convert 9876 into Russian spelled-out format using spellout tool.
-// Action: Assistant starts by calling spellout tool with rule set "default".
 "from": "user",
 "value": "\nCould you help me convert the number 9876 to its spelled-out format in Russian? I need the spelled-out version for a presentation.\nBegin!\n",
 
 "from": "assistant",
 "value": "Thought: The API is called "spellout_for_spellout" to convert the number 9876 to its spelled-out format in Russian. This specific API is used because it allows converting numbers to spelled-out format in any language. The arguments passed to the API are "data" with the value 9876, "lang" with the value "ru" for Russian, and "ruleset" with the value "default". By using these arguments, the API will accurately convert the number 9876 to its spelled-out version in the Russian language.\nAction: spellout_for_spellout\nAction Input: {{"data": 9876, "lang": "ru", "ruleset": "default"}}",
 
-// Result: Tool returns structured error indicating rule set "default" not found for Russian.
 "from": "function",
 "value": {{"error": "", "response": "Rule Set 'default' is not found for language 'ru'"}},
 
-// Result: System reports unknown due to unrecognized rule set.
 "from": "function",
 "value": ""unknown"",
 
-// Reason: Recovery triggered due to invalid ruleset for selected language.
-// Action: Query API for valid rulesets for Russian using rulesets_for_spellout.
 "from": "assistant",
 "value": "Recovery: Thought: The error indicates that the 'default' rule set is not available for the Russian language. I will first check the available rule sets for Russian to find a valid option.\nAction: rulesets_for_spellout\nAction Input: {{"lang": "ru"}}",
 
-// Result: API returns valid rule sets: "spellout-cardinal" and "spellout-ordinal".
 "from": "function",
 "value": {{"rulesets": ["spellout-cardinal", "spellout-ordinal"]}},
 
-// Reason: Assistant selects appropriate fallback rule set for cardinal numbers.
-// Action: Retry with rule set "spellout-cardinal".
 "from": "assistant",
 "value": "Recovery: Thought: The available rule sets for Russian are 'spellout-cardinal' and 'spellout-ordinal'. I will use the 'spellout-cardinal' rule set to convert the number 9876 to its spelled-out format in Russian.\nAction: spellout_for_spellout\nAction Input: {{"data": 9876, "lang": "ru", "ruleset": "spellout-cardinal"}}",
 
-// Result: API returns correct spelled-out number.
 "from": "function",
 "value": {{"spelled_out": "девять тысяч восемьсот семьдесят шесть"}},
 
-// Reason: All recovery steps successful — task complete.
-// Action: Finish with final user-facing output.
 "from": "assistant",
 "value": "Thought: I have successfully converted the number 9876 to its spelled-out format in Russian using the 'spellout-cardinal' rule set.\nAction: Finish\nAction Input: {{"return_type": "give_answer", "final_answer": "The number 9876 is spelled out as 'девять тысяч восемьсот семьдесят шесть' in Russian."}}"
 
@@ -1666,7 +1337,7 @@ MESSAGE WRAPPERS
 
 REQUIRED SEQUENCE  
 -----------------
-1. At least one Recovery assistant message → matching function output.  
+1. At least one Recovery assistant message → matching function output.  The function output should NOT include an error if it is a successful call.  ENSURE that there is no error in outputs which are meant to be succesful calls. 
 2. Repeat (Recovery ↔ function) until resolved.  
 3. End with either:  
    • Action: Finish  — or —  
@@ -1723,7 +1394,7 @@ VALIDATION CHECKLIST (internal)
 def improve_path(task,tools,oldconvo):
     tools_context = f"Available Tools:\n{tools}" if tools else ""
     conversation_context = f"Old version of the conversation:\n{oldconvo}" if oldconvo else ""
-
+    singlebrace="{"
     prompt=f"""
 You are a completion assistant tasked with rewriting partial or minimal tool-based conversations into **fully-fleshed, error-free “happy-path” dialogues**.
 
@@ -1781,7 +1452,27 @@ You are a completion assistant tasked with rewriting partial or minimal tool-bas
      • Every Function value is valid JSON.  
      • No message ends with an unclosed brace.  
    - If any check fails, the assistant must fix the conversation **before** outputting Finish.
+  
+ACTION INPUT/OUTPUT FORMATTING RULE:
+- Always write Action Input and Function Output as **escaped JSON inside a string**.
+- Use `\\` to escape quotes, and **double curly braces**: `{{…}}`.
+- NEVER output a single `{singlebrace}` or unescaped `"field": "value"` — that is a violation.
 
+---
+BAD EXAMPLE — DO NOT DO THIS
+"Action Input": {{
+  "username": "nike"
+}}
+"Function Output": {{
+  "data": "xyz"
+}}
+---
+---
+
+GOOD EXAMPLE — ESCAPED FORMAT REQUIRED
+"Action Input": {{\"username\": \"nike\"}}
+"Function Output": {{\"data\": \"xyz\"}}
+---
 ---
 
 ## Example 1 — Single Clean Success
@@ -1855,7 +1546,7 @@ You are a completion assistant tasked with rewriting partial or minimal tool-bas
 "value": "Thought: I have both the brewery list and the nutrition analysis. Time to present the results.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here are New York breweries that offer tours:\\\\n\\\\n- **Brooklyn Brewery** — 79 N 11th St, Brooklyn (Weekend tours)\\\\n- **Other Half Brewing Company** — 195 Centre St, Brooklyn (Daily tours)\\\\n\\\\n**Nutritional analysis** for a chicken, broccoli & quinoa recipe (per serving):\\\\n- Calories: 500 kcal\\\\n- Protein: 40 g\\\\n- Carbohydrates: 50 g\\\\n- Fat: 15 g\\\\n\\\\nHave fun at your beer-tasting party and enjoy the healthy meal!\"}}"
 ---
 
-Now generate the complete, error-free conversation in this exact format.
+Now generate the complete, error-free conversation in this exact format with every function call containing values and not just one curly brace. NEVER have just one curly brace.  Also make sure there are no random non english charecters being inserted. 
 
 
 """
@@ -2052,15 +1743,16 @@ def augment_with_failure(example, failure_type,failure_index):
 # if __name__ == "__main__":
 #     main()
 
-input_file = "C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/Newdata.jsonl"
-output_file = "C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/PaladinEvalData_modified.jsonl"
+input_file = "C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/newdata.jsonl"
+output_file = "C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/GPTdata1.jsonl"
 
 
-
+cnt=0
 FAILURE_KEYS = list(recovery_paths.keys())
 
 with open(input_file, "r", encoding="utf-8") as infile, open(output_file, "w", encoding="utf-8") as outfile:
     for line in infile:
+        cnt+=1
         obj = json.loads(line)
         convos = obj.get("conversations", [])
         
@@ -2085,19 +1777,20 @@ with open(input_file, "r", encoding="utf-8") as infile, open(output_file, "w", e
                   randomnum = 0
         
         if failureidx is not None and failurecode is not None:
-            print(f"Processing object {obj.get('id', 'unknown')} with failure {failurecode} at index {failureidx}")
+    
             newconvos = augment_with_failure(obj, failurecode, failureidx)
         
             # Only write if augmentation was successful
             if newconvos is not None:
                 outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
-                print(f"Successfully augmented object {obj.get('id', 'unknown')}")
+          
             else:
                 # If augmentation failed, write the original object
                 continue
         elif failureidx is None and failurecode is None:
             newconvos=augment_to_make_better(obj)
             outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
+        print(cnt)
         
 
             

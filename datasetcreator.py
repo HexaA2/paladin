@@ -5,8 +5,16 @@ from tqdm import tqdm
 import random
 import re
 
+x=3
+y=0
+z=x*y
+a=z+3
+z=str(z)
+a=str(a)
+
 # === CONFIG === #
 openai.api_key = ""
+
 
 recovery_paths={
   "_legend": {
@@ -1001,19 +1009,12 @@ def generate_recovery(Last_thought, Last_decided_action, Last_inpure, actual_err
     recovery_paths_str = str(recovery_paths)
     
     # Build the prompt in parts to avoid deep f-string nesting
-    prompt_parts = []
-    
-    # Part 1: Introduction and task description
-    prompt_parts.append("""You are a recovery assistant for LLM agents using tools/APIs in a multi-step workflow.
-Your job is to respond to tool call failures with a structured recovery plan and follow it until the task is completed or declared unsolvable.
-
+    usercontent=f"""
 ---
 
 ## Recovery Task
-You will be given:""")
-    
-    # Part 2: Context information
-    prompt_parts.append(f"""- The failure type and general recovery protocols: {failure_type} in {recovery_paths_str} Legend for compact flows: "t"=Thought, "do"=Action, "out"=Function Output.
+You will be given:
+The failure type and general recovery protocols: {failure_type} in the recovery paths dictionary. (Legend for compact flows: "t"=Thought, "do"=Action, "out"=Function Output.)
 Treat flows as reference only; adjust freely per signals and tool specs.
 - Task context: {task_context}
 - Tool descriptions: {tools_context}
@@ -1021,19 +1022,25 @@ Treat flows as reference only; adjust freely per signals and tool specs.
 - The most recent thought, action, and action input that caused the error:
     Most recent thought: {Last_thought}
     Most recent action: {Last_decided_action}
-    Most recent input: {Last_inpure}""")
-    
-    # Part 3: Job description
-    prompt_parts.append(f"""Your job is to:
+    Most recent input: {Last_inpure}
+Your job is to:
 1. Analyze the failure.
 2. Follow the appropriate recovery protocol for the given error.
 3. If the error type is `"unknown"`, first inspect {actual_errormsg} to see if the error is truly unknown. If it is not refer to recovery protocols and solve for error seen in {actual_errormsg}.  If it is blank refer to the same place and determine the most likely cause, then recover accordingly.
 4. Continue the recovery process until either:
    - The task is completed successfully, or
-   - You determine recovery is impossible and output an `"Unable to solve"` message.
+   - You determine recovery is impossible and output an `"Unable to solve"` message."""
+    
 
+    systemcontent=f"""
+---
+You are a recovery assistant for LLM agents using tools/APIs in a multi-step workflow.
+Your job is to respond to tool call failures with a structured recovery plan and follow it until the task is completed or declared unsolvable.
+You will be given this recovery paths dictionary: {recovery_paths_str} which contains various errors and the corresponding recovery paths. (Legend for compact flows: "t"=Thought, "do"=Action, "out"=Function Output.)
+Treat flows as reference only; adjust freely per signals and tool specs.
 ---
 
+---                                        
 ## Workflow Rules
 - Every **recovery attempt** must have a Thought, Action, and Action Input.
 - Use realistic, plausible, and valid JSON for all Action Inputs and function outputs. Do not use placeholders like `(example VIN)` or `(expected output)`.
@@ -1053,10 +1060,7 @@ Treat flows as reference only; adjust freely per signals and tool specs.
 
 ---
 
-## Few-Shot Recovery Demonstrations""")
-    
-    # Part 4: Few-shot examples (these contain the most complex nested JSON)
-    few_shot_examples = """
+## Few-Shot Recovery Demonstrations
 
 ---
 ### Few-Shot Example 1 — Multiple Recovery Attempts Then Unable to Solve 
@@ -1371,16 +1375,16 @@ VALIDATION CHECKLIST (internal)
 ✓ Sequence ends with Finish or Unable (never mid-recovery).
 ---"""
     
-    prompt_parts.append(few_shot_examples)
+
     
     # Combine all parts into the final prompt
-    prompt = "".join(prompt_parts)
+
     
     response = openai.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5-chat-latest",
         messages=[
-            {"role": "system", "content": "You are a precise and efficient LLM recovery agent."},
-            {"role": "user", "content": prompt.strip()}
+            {"role": "system", "content": systemcontent.strip()},
+            {"role": "user", "content": usercontent.strip()}
         ],
         temperature=0.2,
         max_tokens=800
@@ -1391,19 +1395,17 @@ VALIDATION CHECKLIST (internal)
         return "Thought: API returned empty response.\nAction: Finish\nAction Input: {{\"return_type\": \"give_up_and_restart\"}}"
     return result
 
+
+
+
+
+
 def improve_path(task,tools,oldconvo):
     tools_context = f"Available Tools:\n{tools}" if tools else ""
     conversation_context = f"Old version of the conversation:\n{oldconvo}" if oldconvo else ""
     singlebrace="{"
-    prompt=f"""
+    systemprompt=f"""
 You are a completion assistant tasked with rewriting partial or minimal tool-based conversations into **fully-fleshed, error-free “happy-path” dialogues**.
-
----
-
-## Inputs Provided
-- **Task context**: {task}
-- **Tool descriptions**: {tools_context}
-- **Original conversation snippet** (for context only): {conversation_context}
 
 ---
 
@@ -1546,17 +1548,24 @@ GOOD EXAMPLE — ESCAPED FORMAT REQUIRED
 "value": "Thought: I have both the brewery list and the nutrition analysis. Time to present the results.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here are New York breweries that offer tours:\\\\n\\\\n- **Brooklyn Brewery** — 79 N 11th St, Brooklyn (Weekend tours)\\\\n- **Other Half Brewing Company** — 195 Centre St, Brooklyn (Daily tours)\\\\n\\\\n**Nutritional analysis** for a chicken, broccoli & quinoa recipe (per serving):\\\\n- Calories: 500 kcal\\\\n- Protein: 40 g\\\\n- Carbohydrates: 50 g\\\\n- Fat: 15 g\\\\n\\\\nHave fun at your beer-tasting party and enjoy the healthy meal!\"}}"
 ---
 
-Now generate the complete, error-free conversation in this exact format with every function call containing values and not just one curly brace. NEVER have just one curly brace.  Also make sure there are no random non english charecters being inserted. 
-
-
+Now generate the complete, error-free conversation in this exact format with every function call containing values and not just one curly brace. NEVER have just one curly brace.  Also make sure there are no random non english charecters being inserted. """
+    
+    
+    userprompt=f"""
+    You are a precise and efficient Completion Assistant.
+    You will be provided with these inputs to carry out the task:
+      - **Task context**: {task}
+      - **Tool descriptions**: {tools_context}
+      - **Original conversation snippet** (for context only): {conversation_context}
 """
+    
 
 
     response = openai.chat.completions.create(
-          model="gpt-4o",
+          model="gpt-5-chat-latest",
           messages=[
-              {"role": "system", "content": "You are a precise and efficient Completion Assistant."},
-              {"role": "user", "content": prompt.strip()}
+              {"role": "system", "content": userprompt.strip()},
+              {"role": "user", "content": systemprompt.strip()}
           ],
           temperature=0.2,
           max_tokens=800
@@ -1743,54 +1752,60 @@ def augment_with_failure(example, failure_type,failure_index):
 # if __name__ == "__main__":
 #     main()
 
-input_file = "C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/newdata.jsonl"
-output_file = "C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/GPTdata1.jsonl"
+input_file = f"C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/{1}-{a}k.jsonl"
+output_file = f"C:/Users/Sri Vatsa/Desktop/FaiL-Safe Benchmark/ToolBench/data/FinalSFTTraining_{1}-{a}K.jsonl"
+
 
 
 cnt=0
+cntx=0
 FAILURE_KEYS = list(recovery_paths.keys())
+with open(output_file, "r", encoding="utf-8") as existing_file:
+    existing_line_count = sum(1 for line in existing_file)
 
-with open(input_file, "r", encoding="utf-8") as infile, open(output_file, "w", encoding="utf-8") as outfile:
+with open(input_file, "r", encoding="utf-8") as infile, open(output_file, "a", encoding="utf-8") as outfile:
     for line in infile:
-        cnt+=1
-        obj = json.loads(line)
-        convos = obj.get("conversations", [])
-        
-        # Reset variables for each object
-        failureidx = None
-        failurecode = None
-
-        
-        for idx, message in enumerate(convos):
-            value = message.get("value", "")
-            if message.get("from", "") == "function":
-              for code in FAILURE_KEYS:
-                  if code in value:
-                      failureidx = idx
-                      failurecode = code
-                      break
-              if failureidx is not None:
-                break
-              if "error" in value  and failureidx is None and failurecode is None:
-                  failureidx = idx
-                  failurecode = "unknown"
-                  randomnum = 0
-        
-        if failureidx is not None and failurecode is not None:
-    
-            newconvos = augment_with_failure(obj, failurecode, failureidx)
-        
-            # Only write if augmentation was successful
-            if newconvos is not None:
-                outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
+        cntx+=1
+        if cntx<existing_line_count:
+          cnt+=1
+          obj = json.loads(line)
+          convos = obj.get("conversations", [])
           
-            else:
-                # If augmentation failed, write the original object
-                continue
-        elif failureidx is None and failurecode is None:
-            newconvos=augment_to_make_better(obj)
-            outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
-        print(cnt)
-        
+          # Reset variables for each object
+          failureidx = None
+          failurecode = None
 
+          
+          for idx, message in enumerate(convos):
+              value = message.get("value", "")
+              if message.get("from", "") == "function":
+                for code in FAILURE_KEYS:
+                    if code in value:
+                        failureidx = idx
+                        failurecode = code
+                        break
+                if failureidx is not None:
+                  break
+                if "error" in value  and failureidx is None and failurecode is None:
+                    failureidx = idx
+                    failurecode = "unknown"
+                    randomnum = 0
+          
+          if failureidx is not None and failurecode is not None:
+      
+              newconvos = augment_with_failure(obj, failurecode, failureidx)
+          
+              # Only write if augmentation was successful
+              if newconvos is not None:
+                  outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
             
+              else:
+                  # If augmentation failed, write the original object
+                  continue
+          elif failureidx is None and failurecode is None:
+              newconvos=augment_to_make_better(obj)
+              outfile.write(json.dumps(newconvos, ensure_ascii=False) + "\n")
+          print(cnt)
+          
+
+              

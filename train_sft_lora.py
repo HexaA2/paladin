@@ -29,9 +29,9 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 # 4) LoRA setup (targets standard attention/MLP proj layers)
-lora_cfg = LoraConfig(
-    r=16, lora_alpha=32, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
-    target_modules=["q_proj","k_proj","v_proj","o_proj","up_proj","down_proj","gate_proj"]
+lora_cfg = LoraConfig(r=32, lora_alpha=64, lora_dropout=0.05, bias="none",
+           task_type="CAUSAL_LM",
+           target_modules=["q_proj","k_proj","v_proj","o_proj","up_proj","down_proj","gate_proj"])
 )
 model = get_peft_model(model, lora_cfg)
 

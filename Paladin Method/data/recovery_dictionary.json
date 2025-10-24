@@ -1,0 +1,931 @@
+{
+  "_legend": {
+    "t": "Thought",
+    "do": "Action (conceptual, not a tool name)",
+    "out": "Simulated function output/result"
+  },
+  "400": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "400 → malformed input likely; even though URL/endpoint looked fine, it still fails"
+        ],
+        [
+          "do",
+          "Check headers & required params; correct Content-Type/Auth; resend"
+        ],
+        ["out", { "error": { "code": 400, "message": "Bad Request" } }],
+        [
+          "t",
+          "Still 400 → payload/schema suspect (types, required, enums, formats)"
+        ],
+        ["do", "Validate JSON against schema; fix offending fields; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Resolved after correcting schema; Finish"]
+      ],
+      "fail": [
+        [
+          "t",
+          "400 persists after URL, headers, schema, and minimal-payload checks"
+        ],
+        [
+          "do",
+          "Test known-good sample; diff to find hidden rule; if unresolved, escalate with req/resp & steps"
+        ],
+        ["out", { "hand_off": "400_unresolved" }]
+      ]
+    }
+  },
+  "401": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "401 → creds invalid; even though Authorization header exists, still 401"
+        ],
+        ["do", "Refresh/obtain token; verify scope/audience; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Authorized; Finish"]
+      ],
+      "fail": [
+        ["t", "Still 401 after refresh → account/role issue"],
+        [
+          "do",
+          "Notify admin/user to fix roles or re-enable account; attach failing req details"
+        ],
+        ["out", { "hand_off": "401_permissions" }]
+      ]
+    }
+  },
+  "403": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "403 → authenticated but forbidden; even though docs say we should have access, still denied"
+        ],
+        [
+          "do",
+          "Confirm org policy/resource ACL; request explicit grant; retry"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "Access granted; Finish"]
+      ],
+      "fail": [
+        [
+          "t",
+          "403 persists despite correct role on paper → policy guardrail/region restriction"
+        ],
+        [
+          "do",
+          "Escalate with resource ID, tenant, policy dump; propose alt resource/region"
+        ],
+        ["out", { "hand_off": "403_forbidden_persistent" }]
+      ]
+    }
+  },
+  "404": {
+    "paths": {
+      "success": [
+        [
+          "t",
+          "404 → not found; even though identifiers look correct, still missing"
+        ],
+        [
+          "do",
+          "List resources / search alt endpoints to confirm existence/rename"
+        ],
+        ["out", { "data": [{ "id": "found_replacement" }] }],
+        ["t", "Found correct resource; Finish"]
+      ],
+      "fail": [
+        ["t", "404 confirmed across listings → permanent missing"],
+        ["do", "Report deletion/migration; propose recreate or alternative"],
+        ["out", { "hand_off": "404_permanent" }]
+      ]
+    }
+  },
+  "408": {
+    "paths": {
+      "success": [
+        ["t", "Timeout; even though network seems fine, server is slow"],
+        ["do", "Retry with exponential backoff; increase timeout modestly"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed within extended timeout; Finish"]
+      ],
+      "fail": [
+        ["t", "Repeated 408 → upstream overload or network path issue"],
+        ["do", "Switch endpoint/region if available; otherwise defer & alert"],
+        ["out", { "hand_off": "408_persistent_timeout" }]
+      ]
+    }
+  },
+  "429": {
+    "paths": {
+      "success": [
+        ["t", "429 → rate limited"],
+        ["do", "Honor Retry-After/backoff; throttle concurrency; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Request accepted after throttling; Finish"]
+      ],
+      "fail": [
+        ["t", "429 persists → quota ceiling"],
+        ["do", "Queue work; reduce concurrency; request higher quota"],
+        ["out", { "hand_off": "429_quota_increase_needed" }]
+      ]
+    }
+  },
+  "500": {
+    "paths": {
+      "success": [
+        ["t", "500 → transient server error"],
+        ["do", "Retry with backoff (1s,2s,4s) x3"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded on retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Still 500 after backoff → outage/bug"],
+        ["do", "Check provider status; log; pause until healthy; notify user"],
+        ["out", { "hand_off": "provider_outage" }]
+      ]
+    }
+  },
+  "503": {
+    "paths": {
+      "success": [
+        ["t", "503 → service unavailable"],
+        ["do", "If Retry-After present, wait; else backoff and retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Service recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Prolonged 503"],
+        ["do", "Alert/deferr; notify user and monitor status"],
+        ["out", { "hand_off": "503_prolonged_unavailable" }]
+      ]
+    }
+  },
+  "502": {
+    "paths": {
+      "success": [
+        ["t", "502 → bad gateway; transient upstream glitch"],
+        ["do", "Brief wait then retry; consider alternate upstream"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded after retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Repeated 502 → upstream instability"],
+        ["do", "Fail over if possible; otherwise escalate"],
+        ["out", { "hand_off": "502_upstream_issue" }]
+      ]
+    }
+  },
+  "504": {
+    "paths": {
+      "success": [
+        ["t", "504 → gateway timeout"],
+        ["do", "Increase timeout slightly; retry; verify upstream health"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed after adjustment; Finish"]
+      ],
+      "fail": [
+        ["t", "Persistent 504"],
+        ["do", "Escalate to upstream owners; inform user"],
+        ["out", { "hand_off": "504_upstream_timeout" }]
+      ]
+    }
+  },
+  "505": {
+    "paths": {
+      "success": [
+        ["t", "505 → HTTP version unsupported"],
+        ["do", "Switch to supported version (HTTP/1.1 or HTTP/2)"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed with supported protocol; Finish"]
+      ],
+      "fail": [
+        ["t", "Protocol constraints cannot be met"],
+        ["do", "Document limitation; propose compatible client/server"],
+        ["out", { "hand_off": "505_incompatibility" }]
+      ]
+    }
+  },
+  "507": {
+    "paths": {
+      "success": [
+        ["t", "507 → insufficient storage"],
+        ["do", "Free space/rotate logs; retry write"],
+        ["out", { "status": "ok" }],
+        ["t", "Write succeeded post cleanup; Finish"]
+      ],
+      "fail": [
+        ["t", "Storage remains full"],
+        ["do", "Request expansion; pause writes"],
+        ["out", { "hand_off": "507_storage_full" }]
+      ]
+    }
+  },
+  "508": {
+    "paths": {
+      "success": [
+        ["t", "508 → loop detected"],
+        ["do", "Break cyclic reference; adjust traversal/links; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Loop resolved; Finish"]
+      ],
+      "fail": [
+        ["t", "Cannot break loop automatically"],
+        ["do", "Log full path/graph; assign manual fix"],
+        ["out", { "hand_off": "508_loop_persistent" }]
+      ]
+    }
+  },
+  "510": {
+    "paths": {
+      "success": [
+        ["t", "510 → extensions/headers required"],
+        ["do", "Add required options/headers per docs; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Accepted with extensions; Finish"]
+      ],
+      "fail": [
+        ["t", "Unknown extension requirement"],
+        ["do", "Escalate with server demand details"],
+        ["out", { "hand_off": "510_missing_extension_unknown" }]
+      ]
+    }
+  },
+  "511": {
+    "paths": {
+      "success": [
+        ["t", "511 → network auth required"],
+        ["do", "Complete captive portal/login; retry request"],
+        ["out", { "status": "ok" }],
+        ["t", "Network authenticated; Finish"]
+      ],
+      "fail": [
+        ["t", "Cannot complete network auth programmatically"],
+        ["do", "Ask user to authenticate; provide steps"],
+        ["out", { "hand_off": "511_user_network_auth_needed" }]
+      ]
+    }
+  },
+  "529": {
+    "paths": {
+      "success": [
+        ["t", "529 → site overloaded"],
+        ["do", "Backoff & jitter; spread requests; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed after load subsided; Finish"]
+      ],
+      "fail": [
+        ["t", "Sustained overload"],
+        ["do", "Defer/queue; notify user"],
+        ["out", { "hand_off": "529_overload_persistent" }]
+      ]
+    }
+  },
+  "530": {
+    "paths": {
+      "success": [
+        ["t", "530 → site/account frozen"],
+        ["do", "Notify owner; resolve billing/policy; retry once unfrozen"],
+        ["out", { "status": "ok" }],
+        ["t", "Unfrozen & processed; Finish"]
+      ],
+      "fail": [
+        ["t", "Freeze persists"],
+        ["do", "Provide support contact; pause job"],
+        ["out", { "hand_off": "530_frozen_account" }]
+      ]
+    }
+  },
+  "540": {
+    "paths": {
+      "success": [
+        ["t", "540 → endpoint temporarily disabled"],
+        ["do", "Log maintenance; retry after window"],
+        ["out", { "status": "ok" }],
+        ["t", "Service restored; Finish"]
+      ],
+      "fail": [
+        ["t", "Extended disablement"],
+        ["do", "Offer alternative flow; inform user"],
+        ["out", { "hand_off": "540_disabled_extended" }]
+      ]
+    }
+  },
+  "598": {
+    "paths": {
+      "success": [
+        ["t", "598 → proxy read timeout"],
+        ["do", "Increase timeout modestly; retry; verify network path"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed after tuning; Finish"]
+      ],
+      "fail": [
+        ["t", "Timeout persists via proxy"],
+        ["do", "Bypass/alternate proxy; escalate to netops"],
+        ["out", { "hand_off": "598_proxy_timeout" }]
+      ]
+    }
+  },
+  "599": {
+    "paths": {
+      "success": [
+        ["t", "599 → proxy connect timeout"],
+        ["do", "Retry with backoff; test connectivity; alternate route"],
+        ["out", { "status": "ok" }],
+        ["t", "Connected on retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Cannot connect via proxy"],
+        ["do", "Escalate to netops; suggest direct route if allowed"],
+        ["out", { "hand_off": "599_proxy_connect_fail" }]
+      ]
+    }
+  },
+  "421": {
+    "paths": {
+      "success": [
+        ["t", "421 → misdirected request"],
+        ["do", "Send to correct origin/host; verify routing"],
+        ["out", { "status": "ok" }],
+        ["t", "Routed correctly; Finish"]
+      ],
+      "fail": [
+        ["t", "Routing unresolved"],
+        ["do", "Escalate with host map and trace"],
+        ["out", { "hand_off": "421_routing_issue" }]
+      ]
+    }
+  },
+  "DNS Resolution Error": {
+    "paths": {
+      "success": [
+        ["t", "DNS resolution failed; even though domain looks correct"],
+        [
+          "do",
+          "Resolve a known public host to test DNS; flush/alternate resolver; retry"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "DNS healthy after switch; Finish"]
+      ],
+      "fail": [
+        ["t", "Custom domain still not resolving"],
+        ["do", "Escalate to infra; provide NS records and failure traces"],
+        ["out", { "hand_off": "dns_unresolved" }]
+      ]
+    }
+  },
+  "Malformed JSON": {
+    "paths": {
+      "success": [
+        ["t", "Server returned malformed JSON; might be transient"],
+        [
+          "do",
+          "Retry once; if still malformed, apply tolerant parse or fetch alt format if available"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "Parsed successfully; Finish"]
+      ],
+      "fail": [
+        ["t", "Response remains malformed"],
+        [
+          "do",
+          "Capture sample; notify API owner; fallback to cached/previous data"
+        ],
+        ["out", { "hand_off": "malformed_json_persistent" }]
+      ]
+    }
+  },
+  "JSON Schema Violation": {
+    "paths": {
+      "success": [
+        ["t", "Schema mismatch; even though types looked right"],
+        ["do", "Validate against schema; coerce/omit failing fields; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Accepted after correction; Finish"]
+      ],
+      "fail": [
+        ["t", "Violation originates server-side data"],
+        ["do", "Log failing fields; escalate to provider"],
+        ["out", { "hand_off": "schema_violation_server" }]
+      ]
+    }
+  },
+  "NoSuchToolError": {
+    "paths": {
+      "success": [
+        ["t", "Tried to call an unavailable tool"],
+        ["do", "Check registry; correct name or select supported alternative"],
+        ["out", { "status": "ok" }],
+        ["t", "Tool corrected; Finish"]
+      ],
+      "fail": [
+        ["t", "No equivalent tool available"],
+        ["do", "Report limitation; suggest manual step"],
+        ["out", { "hand_off": "no_such_tool" }]
+      ]
+    }
+  },
+  "InvalidToolArgumentsError": {
+    "paths": {
+      "success": [
+        ["t", "Tool args invalid; even though syntax looked fine"],
+        ["do", "Review spec; fix names/types; resend"],
+        ["out", { "status": "ok" }],
+        ["t", "Tool executed with corrected args; Finish"]
+      ],
+      "fail": [
+        ["t", "Argument contract unclear"],
+        ["do", "Request example call/spec update; escalate"],
+        ["out", { "hand_off": "invalid_args_unclear" }]
+      ]
+    }
+  },
+  "ToolExecutionError": {
+    "paths": {
+      "success": [
+        ["t", "Tool threw exception"],
+        [
+          "do",
+          "Capture stack/output; retry if transient; reset state if applicable"
+        ],
+        ["out", { "status": "ok" }],
+        ["t", "Recovered after reset/retry; Finish"]
+      ],
+      "fail": [
+        ["t", "Deterministic tool failure"],
+        ["do", "Open issue with trace; propose alternative route"],
+        ["out", { "hand_off": "tool_execution_bug" }]
+      ]
+    }
+  },
+  "ToolCallRepairError": {
+    "paths": {
+      "success": [
+        ["t", "Automatic repair attempt failed"],
+        ["do", "Switch strategy: reset tool state or choose a different tool"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded after alternative; Finish"]
+      ],
+      "fail": [
+        ["t", "Alternate strategies exhausted"],
+        ["do", "Escalate with repair log"],
+        ["out", { "hand_off": "tool_repair_exhausted" }]
+      ]
+    }
+  },
+  "RuntimeError": {
+    "paths": {
+      "success": [
+        ["t", "Unexpected runtime error"],
+        ["do", "Inspect message; rollback recent change; reset state; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Runtime defect persists"],
+        ["do", "Log trace; pin to version; escalate"],
+        ["out", { "hand_off": "runtime_persistent" }]
+      ]
+    }
+  },
+  "DataError": {
+    "paths": {
+      "success": [
+        ["t", "Invalid/missing data"],
+        ["do", "Validate/clean; fill defaults; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed with corrected data; Finish"]
+      ],
+      "fail": [
+        ["t", "Data irreparable automatically"],
+        ["do", "Report missing fields; request source fix"],
+        ["out", { "hand_off": "data_source_issue" }]
+      ]
+    }
+  },
+  "ConnectionError": {
+    "paths": {
+      "success": [
+        ["t", "Network connection failed"],
+        ["do", "Test reachability; backoff; try alternate endpoint"],
+        ["out", { "status": "ok" }],
+        ["t", "Connected and retried; Finish"]
+      ],
+      "fail": [
+        ["t", "Connectivity remains down"],
+        ["do", "Escalate to networking; include traceroute/logs"],
+        ["out", { "hand_off": "network_down" }]
+      ]
+    }
+  },
+  "TypeError": {
+    "paths": {
+      "success": [
+        ["t", "Wrong types passed"],
+        ["do", "Check variable types; cast/convert; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded with correct types; Finish"]
+      ],
+      "fail": [
+        ["t", "Type source ambiguous"],
+        ["do", "Add validation at boundaries; escalate with sample payload"],
+        ["out", { "hand_off": "type_mismatch_root_unknown" }]
+      ]
+    }
+  },
+  "NullPointerException": {
+    "paths": {
+      "success": [
+        ["t", "Tried to use a null/None value"],
+        ["do", "Add null checks; ensure init before use; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "No longer null; Finish"]
+      ],
+      "fail": [
+        ["t", "Upstream provides null unavoidably"],
+        ["do", "Request upstream fix or guard with fallback"],
+        ["out", { "hand_off": "null_source_upstream" }]
+      ]
+    }
+  },
+  "IndexOutOfBoundsException": {
+    "paths": {
+      "success": [
+        ["t", "Index outside bounds"],
+        ["do", "Check lengths; clamp indices; adjust loops"],
+        ["out", { "status": "ok" }],
+        ["t", "Valid indices used; Finish"]
+      ],
+      "fail": [
+        ["t", "Data shape unpredictable"],
+        ["do", "Add defensive programming and skip invalid slices"],
+        ["out", { "hand_off": "index_out_of_bounds_persistent" }]
+      ]
+    }
+  },
+  "ClassCastException": {
+    "paths": {
+      "success": [
+        ["t", "Invalid cast between types"],
+        ["do", "Check actual types; use safe conversions; update logic"],
+        ["out", { "status": "ok" }],
+        ["t", "Corrected casting; Finish"]
+      ],
+      "fail": [
+        ["t", "Heterogeneous data prevents stable casting"],
+        ["do", "Normalize input schema; escalate to provider"],
+        ["out", { "hand_off": "class_cast_unstable" }]
+      ]
+    }
+  },
+  "StackOverflowError": {
+    "paths": {
+      "success": [
+        ["t", "Likely infinite/too-deep recursion"],
+        ["do", "Add base case; refactor to iteration; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "No overflow after refactor; Finish"]
+      ],
+      "fail": [
+        ["t", "Recursion required by algorithm & too deep"],
+        ["do", "Increase stack cautiously or batch work; escalate"],
+        ["out", { "hand_off": "stack_overflow_unavoidable" }]
+      ]
+    }
+  },
+  "OutOfMemoryError": {
+    "paths": {
+      "success": [
+        ["t", "Process exceeded memory"],
+        ["do", "Free caches; stream/chunk data; reduce batch size"],
+        ["out", { "status": "ok" }],
+        ["t", "Completed within memory budget; Finish"]
+      ],
+      "fail": [
+        ["t", "Memory pressure persists"],
+        ["do", "Add paging/out-of-core; request more RAM"],
+        ["out", { "hand_off": "oom_requires_resources" }]
+      ]
+    }
+  },
+  "ResourceLimitExceeded": {
+    "paths": {
+      "success": [
+        ["t", "Agent hit resource limits"],
+        ["do", "Pause; reduce load; retry after reset"],
+        ["out", { "status": "ok" }],
+        ["t", "Succeeded post-pause; Finish"]
+      ],
+      "fail": [
+        ["t", "Hard limit prevents progress"],
+        ["do", "Request quota increase; reschedule"],
+        ["out", { "hand_off": "resource_limit_hard" }]
+      ]
+    }
+  },
+  "QuotaExceeded": {
+    "paths": {
+      "success": [
+        ["t", "Daily/monthly quota exceeded"],
+        ["do", "Wait for reset or purchase higher tier; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Processed after quota reset; Finish"]
+      ],
+      "fail": [
+        ["t", "Quota cannot be increased now"],
+        ["do", "Throttle workload; partial completion plan"],
+        ["out", { "hand_off": "quota_blocker" }]
+      ]
+    }
+  },
+  "RateLimitExceeded": {
+    "paths": {
+      "success": [
+        ["t", "Too many requests per window"],
+        ["do", "Reduce QPS; add client-side rate limiter; retry later"],
+        ["out", { "status": "ok" }],
+        ["t", "Stable under new rate; Finish"]
+      ],
+      "fail": [
+        ["t", "Provider enforces stricter limits than required"],
+        ["do", "Batch/queue; request policy exemption"],
+        ["out", { "hand_off": "ratelimit_policy" }]
+      ]
+    }
+  },
+  "PermissionDeniedError": {
+    "paths": {
+      "success": [
+        ["t", "Insufficient permissions"],
+        ["do", "Request/adjust ACL; use alternative path; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Access granted or alternate succeeded; Finish"]
+      ],
+      "fail": [
+        ["t", "Access cannot be granted automatically"],
+        ["do", "Provide instructions to owner/admin"],
+        ["out", { "hand_off": "permission_block" }]
+      ]
+    }
+  },
+  "CertificateError": {
+    "paths": {
+      "success": [
+        ["t", "TLS certificate issue"],
+        ["do", "Check hostname/expiry/CA trust; correct URL or trust store"],
+        ["out", { "status": "ok" }],
+        ["t", "Secure connection established; Finish"]
+      ],
+      "fail": [
+        ["t", "Enterprise cert policy blocks connection"],
+        ["do", "Escalate to security; obtain proper CA bundle"],
+        ["out", { "hand_off": "certificate_policy_block" }]
+      ]
+    }
+  },
+  "ModuleNotFoundError": {
+    "paths": {
+      "success": [
+        ["t", "Required module missing"],
+        ["do", "Install/upgrade dependency; fix sys.path; retry import"],
+        ["out", { "status": "ok" }],
+        ["t", "Module imported; Finish"]
+      ],
+      "fail": [
+        ["t", "Environment cannot install dependency"],
+        ["do", "Provide alternative implementation or vendor build"],
+        ["out", { "hand_off": "module_unavailable" }]
+      ]
+    }
+  },
+  "ImportError": {
+    "paths": {
+      "success": [
+        ["t", "Import failed (name/path)"],
+        ["do", "Check spelling/version; correct import path/syntax"],
+        ["out", { "status": "ok" }],
+        ["t", "Import corrected; Finish"]
+      ],
+      "fail": [
+        ["t", "Package broken/incompatible"],
+        ["do", "Pin to working version; file bug"],
+        ["out", { "hand_off": "import_incompatibility" }]
+      ]
+    }
+  },
+  "AttributeError": {
+    "paths": {
+      "success": [
+        ["t", "Missing attribute/method"],
+        ["do", "Verify object type/API; adjust usage"],
+        ["out", { "status": "ok" }],
+        ["t", "Attribute access corrected; Finish"]
+      ],
+      "fail": [
+        ["t", "Version drift changed API"],
+        ["do", "Add compatibility shim; escalate doc update"],
+        ["out", { "hand_off": "attribute_removed" }]
+      ]
+    }
+  },
+  "KeyError": {
+    "paths": {
+      "success": [
+        ["t", "Missing dict key"],
+        ["do", "Check existence; provide defaults; validate upstream data"],
+        ["out", { "status": "ok" }],
+        ["t", "Handled missing keys; Finish"]
+      ],
+      "fail": [
+        ["t", "Upstream keeps omitting required keys"],
+        ["do", "Request schema fix; add fallback mapping"],
+        ["out", { "hand_off": "missing_keys_upstream" }]
+      ]
+    }
+  },
+  "ValueError": {
+    "paths": {
+      "success": [
+        ["t", "Bad value within valid type"],
+        ["do", "Validate ranges/enums; correct and retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Accepted with valid value; Finish"]
+      ],
+      "fail": [
+        ["t", "Constraints unknown/undocumented"],
+        ["do", "Infer via probing; if uncertain, escalate for spec"],
+        ["out", { "hand_off": "value_constraints_unknown" }]
+      ]
+    }
+  },
+  "FileNotFoundError": {
+    "paths": {
+      "success": [
+        ["t", "Referenced path not found"],
+        ["do", "Verify path; create/restore file; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "File operation succeeded; Finish"]
+      ],
+      "fail": [
+        ["t", "File genuinely missing and cannot be recreated"],
+        ["do", "Notify owner; propose alternative input"],
+        ["out", { "hand_off": "file_missing_unrecoverable" }]
+      ]
+    }
+  },
+  "IOError": {
+    "paths": {
+      "success": [
+        ["t", "I/O failure reading/writing"],
+        ["do", "Verify device readiness; retry; use fallback path"],
+        ["out", { "status": "ok" }],
+        ["t", "I/O recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Underlying device unreliable"],
+        ["do", "Escalate to ops; switch storage"],
+        ["out", { "hand_off": "io_device_issue" }]
+      ]
+    }
+  },
+  "UncaughtException": {
+    "paths": {
+      "success": [
+        ["t", "Exception bubbled without handler"],
+        ["do", "Add try/except around risky call; log; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Error handled gracefully; Finish"]
+      ],
+      "fail": [
+        ["t", "Root cause unknown"],
+        ["do", "Collect repro steps & stack trace; escalate"],
+        ["out", { "hand_off": "uncaught_exception_analysis" }]
+      ]
+    }
+  },
+  "AuthenticationTimeout": {
+    "paths": {
+      "success": [
+        ["t", "Auth flow exceeded time; even though creds valid"],
+        ["do", "Increase timeout/backoff; try alternate auth endpoint"],
+        ["out", { "status": "ok" }],
+        ["t", "Authenticated within new window; Finish"]
+      ],
+      "fail": [
+        ["t", "Auth system degraded"],
+        ["do", "Inform user; retry later; monitor"],
+        ["out", { "hand_off": "auth_timeout_persistent" }]
+      ]
+    }
+  },
+  "WritePermissionError": {
+    "paths": {
+      "success": [
+        ["t", "No rights to write target"],
+        ["do", "Request permission or choose writable location; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Write succeeded; Finish"]
+      ],
+      "fail": [
+        ["t", "Policy forbids write"],
+        ["do", "Provide export to allowed location"],
+        ["out", { "hand_off": "write_permission_policy" }]
+      ]
+    }
+  },
+  "ReadError": {
+    "paths": {
+      "success": [
+        ["t", "Failed to read file/stream"],
+        ["do", "Retry with correction; open backup/replica"],
+        ["out", { "status": "ok" }],
+        ["t", "Read recovered; Finish"]
+      ],
+      "fail": [
+        ["t", "Source corrupted/unavailable"],
+        ["do", "Notify data owner; restore from backup"],
+        ["out", { "hand_off": "read_source_corrupt" }]
+      ]
+    }
+  },
+  "BrokenPipeError": {
+    "paths": {
+      "success": [
+        ["t", "Connection closed mid-transfer"],
+        ["do", "Re-establish connection; resume safely"],
+        ["out", { "status": "ok" }],
+        ["t", "Transfer completed; Finish"]
+      ],
+      "fail": [
+        ["t", "Repeated pipe breaks"],
+        ["do", "Throttle/buffer; escalate network stability issue"],
+        ["out", { "hand_off": "broken_pipe_persistent" }]
+      ]
+    }
+  },
+  "BadGatewayError": {
+    "paths": {
+      "success": [
+        ["t", "Gateway returned invalid upstream response"],
+        ["do", "Retry or failover; verify upstream status"],
+        ["out", { "status": "ok" }],
+        ["t", "Gateway healthy; Finish"]
+      ],
+      "fail": [
+        ["t", "Gateway keeps failing"],
+        ["do", "Provide alt route; escalate to upstream"],
+        ["out", { "hand_off": "bad_gateway_persistent" }]
+      ]
+    }
+  },
+  "ParseError": {
+    "paths": {
+      "success": [
+        ["t", "Could not parse server data"],
+        ["do", "Adjust parser; attempt tolerant parse; request alt format"],
+        ["out", { "status": "ok" }],
+        ["t", "Parsed with adjustments; Finish"]
+      ],
+      "fail": [
+        ["t", "Format incompatible"],
+        ["do", "Request spec or exporter fix; fallback summary"],
+        ["out", { "hand_off": "parse_incompatible" }]
+      ]
+    }
+  },
+  "InvalidContentType": {
+    "paths": {
+      "success": [
+        ["t", "Unexpected content type received"],
+        ["do", "Negotiate/ask for supported type; adjust handler"],
+        ["out", { "status": "ok" }],
+        ["t", "Handled correct type; Finish"]
+      ],
+      "fail": [
+        ["t", "Provider cannot serve compatible type"],
+        ["do", "Convert via proxy/transformer; or escalate"],
+        ["out", { "hand_off": "content_type_incompatible" }]
+      ]
+    }
+  },
+  "ServiceDependencyFailure": {
+    "paths": {
+      "success": [
+        ["t", "Upstream dependency failed"],
+        ["do", "Identify failing service; wait until healthy; retry"],
+        ["out", { "status": "ok" }],
+        ["t", "Resumed after dependency recovery; Finish"]
+      ],
+      "fail": [
+        ["t", "Dependency outage ongoing"],
+        ["do", "Queue work; notify stakeholders"],
+        ["out", { "hand_off": "dependency_outage" }]
+      ]
+    }
+  }
+}

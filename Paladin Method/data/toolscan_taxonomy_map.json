@@ -1,0 +1,95 @@
+{
+  "Tool Hallucination": {
+    "_description": "tool not found errors",
+    "errors": [
+      "DNS Resolution Error",
+      "NoSuchToolError",
+      "ConnectionError",
+      "ModuleNotFoundError",
+      "ImportError",
+      "BadGatewayError",
+      "ServiceDependencyFailure"
+    ]
+  },
+  "Argument Hallucination": {
+    "_description": "missing or invalid tool input",
+    "errors": [
+      "InvalidToolArgumentsError",
+      "AttributeError",
+      "KeyError",
+      "ValueError"
+    ]
+  },
+  "Invalid Tool Invocation": {
+    "_description": "tool call failed",
+    "errors": [
+      "400",
+      "401",
+      "403",
+      "404",
+      "408",
+      "500",
+      "502",
+      "505",
+      "510",
+      "511",
+      "529",
+      "530",
+      "598",
+      "599",
+      "421",
+      "ToolExecutionError",
+      "ToolCallRepairError",
+      "DataError",
+      "NullPointerException",
+      "PermissionDeniedError",
+      "CertificateError",
+      "FileNotFoundError",
+      "IOError",
+      "UncaughtException",
+      "AuthenticationTimeout",
+      "WritePermissionError",
+      "ReadError"
+    ]
+  },
+  "Partial Execution": {
+    "_description": "incomplete tool outputs requiring continuation",
+    "errors": [
+      "429",
+      "503",
+      "504",
+      "507",
+      "540",
+      "OutOfMemoryError",
+      "ResourceLimitExceeded",
+      "QuotaExceeded",
+      "RateLimitExceeded"
+    ]
+  },
+  "Output Hallucination": {
+    "_description": "tool output not valid",
+    "errors": [
+      "Malformed JSON",
+      "JSON Schema Violation",
+      "ParseError",
+      "InvalidContentType"
+    ]
+  },
+  "Invalid Intermediate Reasoning": {
+    "_description": "corrected plans and backtracking in multi-turn dialogues",
+    "errors": [
+      "RuntimeError",
+      "TypeError",
+      "IndexOutOfBoundsException",
+      "ClassCastException"
+    ]
+  },
+  "Re-entrant Failures": {
+    "_description": "handled via explicit retry and fallback logic",
+    "errors": [
+      "508",
+      "StackOverflowError",
+      "BrokenPipeError"
+    ]
+  }
+}

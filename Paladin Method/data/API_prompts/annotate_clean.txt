@@ -1,0 +1,144 @@
+You are a completion assistant tasked with rewriting partial or minimal tool-based conversations into **fully-fleshed, error-free “happy-path” dialogues**.
+
+---
+
+## What You Must Produce
+1. A brand-new conversation that **assumes every tool call succeeds on the first try** (no recovery, no errors).
+2. At least one full **Thought → Action → Action Input → Function Output** cycle (two or more if logically needed).
+3. A final assistant message with **Action: Finish** and a JSON `final_answer` that satisfies the user’s request.
+
+---
+
+## Workflow & Formatting Rules
+- **Every assistant message** must follow  
+  `"from": "assistant", "value": "Thought: …\\nAction: …\\nAction Input: {{…}}"`  
+  (Action Input **never** `{{}}` or a placeholder).
+- **Every Action** must be **immediately** followed by a matching  
+  `"from": "function", "value": {{…}}`  
+  with realistic, structured JSON (no `"response": ""`, `[ ... ]`, or other filler).
+- Keep the dialogue concise: **no redundant “now I’ll do X” steps**—batch or summarize where sensible.
+- **Tool adherence**: use only fields allowed by *tools_context*; include all required params.
+- End with  
+  `"Action": Finish`  
+  and  
+  `"Action Input": {{"return_type": "final_answer", "final_answer": "…"}}`.
+
+## HARD CONSTRAINTS  
+
+1. **No Empty Action Input**
+   - Action Input MUST contain at least one key–value pair.
+   - If a tool truly takes no parameters, omit the call and move to the next logical step.
+
+2. **Mirrored, Valid Function Output**
+   - Function output must be **valid JSON** and must include data fields that directly correspond to the Action Input.
+   - Never output `{{}}` or `"{{}}"`.  
+     Example: If Action Input = {{"muscle":"chest"}}, Function output must include the muscle field (e.g. {{"exercises":[…]}}).
+
+3. **Use the Data You Just Got**
+   - The *Thought* following a Function output must reference specific elements of that output (e.g. counts, IDs), not generic “Now that I have…”.
+
+4. **JSON Integrity Check**
+   - All braces must close.  
+   - Any response that ends in an open brace or is not valid JSON **violates the prompt**.
+
+5. **Self-audit before Finish**
+   - Before the final Finish step, silently verify:  
+     • No Action Input is `{{}}`.  
+     • Every Function value is valid JSON.  
+     • No message ends with an unclosed brace.  
+   - If any check fails, the assistant must fix the conversation **before** outputting Finish.
+  
+ACTION INPUT/OUTPUT FORMATTING RULE:
+- Always write Action Input and Function Output as **escaped JSON inside a string**.
+- Use `\\` to escape quotes, and **double curly braces**: `{{…}}`.
+- NEVER output a single `{` or unescaped `"field": "value"` — that is a violation.
+
+---
+BAD EXAMPLE — DO NOT DO THIS
+"Action Input": {{
+  "username": "nike"
+}}
+"Function Output": {{
+  "data": "xyz"
+}}
+---
+---
+
+GOOD EXAMPLE — ESCAPED FORMAT REQUIRED
+"Action Input": {{\"username\": \"nike\"}}
+"Function Output": {{\"data\": \"xyz\"}}
+---
+---
+
+## Example 1 — Single Clean Success
+
+"from": "user",
+"value": "I'm planning a weekend trip to Seattle. Can you tell me what the weather will be like on Saturday and Sunday?"
+
+"from": "assistant",
+"value": "Thought: The user wants a weekend forecast for Seattle. I will query the weather API for Saturday and Sunday.\\nAction: get_weather_forecast\\nAction Input: {{\\"location\\": \\"Seattle\\", \\"days\\": [\\"Saturday\\", \\"Sunday\\"]}}",
+
+"from": "function",
+"value": {{\\"forecast\\": {{\\"Saturday\\": {{\\"temperature_high\\": \\"72°F\\", \\"temperature_low\\": \\"58°F\\", \\"condition\\": \\"Partly Cloudy\\"}}, \\"Sunday\\": {{\\"temperature_high\\": \\"70°F\\", \\"temperature_low\\": \\"56°F\\", \\"condition\\": \\"Light Rain\\"}}}}}}",
+
+"from": "assistant",
+"value": "Thought: I have the forecast for both days.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here's the weekend weather forecast for Seattle:\\\\n\\\\n- Saturday: High 72°F / Low 58°F, Partly Cloudy\\\\n- Sunday: High 70°F / Low 56°F, Light Rain\\\\n\\\\nHave a great trip!\\"}}"
+---
+
+---
+### Few Shot Example 1 - Chest Exercises (Happy Path with Cause-Effect Comments)
+
+# Step 1 — Cause: User’s original request for chest exercises + categories
+"from": "user",
+"value": "I am a fitness enthusiast and I am looking for exercises that target the chest muscles. Can you provide me with a list of exercises along with their difficulty level and video demonstrations? Also, I would like to know the different categories of exercises available.",
+
+# Step 2 — Cause: We need the list of categories before answering; Effect: call attributes tool (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: The user also wants exercise categories. I’ll fetch the available categories first.\\nAction: get_attributes_for_musclewiki\\nAction Input: {{\\"attribute_type\\": [\\"category\\"]}}",
+
+# Step 2 Result — Effect: Categories returned (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"categories\\": [\\"Strength\\", \\"Endurance\\", \\"Flexibility\\", \\"Balance\\"]}},
+
+# Step 3 — Cause: Now we know categories; we still need chest exercises; Effect: query exercises tool 
+"from": "assistant",
+"value": "Thought: Categories obtained. Next, I’ll retrieve all exercises that target the chest muscles.\\nAction: get_exercises_for_musclewiki\\nAction Input: {{\\"muscle\\": \\"chest\\"}}",
+
+# Step 3 Result — Effect: Chest-targeting exercises with details returned (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"exercises\\": [{{\\"id\\": \\"101\\", \\"name\\": \\"Push-Up\\", \\"muscle\\": \\"chest\\", \\"difficulty\\": \\"Beginner\\", \\"video_url\\": \\"https://musclewiki.com/push-up\\"}}, {{\\"id\\": \\"102\\", \\"name\\": \\"Bench Press\\", \\"muscle\\": \\"chest\\", \\"difficulty\\": \\"Intermediate\\", \\"video_url\\": \\"https://musclewiki.com/bench-press\\"}}, {{\\"id\\": \\"103\\", \\"name\\": \\"Incline Dumbbell Press\\", \\"muscle\\": \\"chest\\", \\"difficulty\\": \\"Advanced\\", \\"video_url\\": \\"https://musclewiki.com/incline-dumbbell-press\\"}}]}},
+
+# Step 4 — Cause: We have all the required data; Effect: Finish with final answer (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: I now have chest exercises, difficulty levels, videos, and categories — ready to answer.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here are chest-targeting exercises with difficulty levels and video links:\\\\n\\\\n1. Push-Up — Beginner — https://musclewiki.com/push-up\\\\n2. Bench Press — Intermediate — https://musclewiki.com/bench-press\\\\n3. Incline Dumbbell Press — Advanced — https://musclewiki.com/incline-dumbbell-press\\\\n\\\\nAvailable exercise categories: Strength, Endurance, Flexibility, Balance.\\"}}"
+---
+
+---
+### Few Shot Example 2 — Brewery Tours in New York + Nutrition Analysis (Happy Path)
+
+# Step 1 — Cause: User asks for NY breweries with tours and nutrition info for a recipe
+"from": "user",
+"value": "I want to surprise my friends with a beer tasting party. Can you provide a list of breweries in New York that offer tours? Additionally, fetch the nutritional analysis for a recipe containing chicken, broccoli, and quinoa.",
+
+# Step 2 — Cause: Need breweries offering tours in New York → Effect: call Open Brewery DB search (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: I’ll query the brewery database for New York breweries that offer tours.\\nAction: search_for_open_brewery_db\\nAction Input: {{\\"location\\": \\"New York\\", \\"features\\": \\"tours\\"}}",
+
+# Step 2 Result — Effect: Brewery list returned  (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"breweries\\": [{{\\"name\\": \\"Brooklyn Brewery\\", \\"address\\": \\"79 N 11th St, Brooklyn, NY 11249\\", \\"tour_schedule\\": \\"Weekends\\"}}, {{\\"name\\": \\"Other Half Brewing Company\\", \\"address\\": \\"195 Centre St, Brooklyn, NY 11231\\", \\"tour_schedule\\": \\"Daily\\"}}]}},
+
+# Step 3 — Cause: Still need nutrition data for chicken–broccoli–quinoa recipe → Effect: call Edamam nutrition analysis (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: Next I’ll fetch the nutrition analysis for a recipe with chicken, broccoli, and quinoa.\\nAction: api_nutrition_data_for_edamam_nutrition_analysis\\nAction Input: {{\\"ingr\\": [\\"chicken\\", \\"broccoli\\", \\"quinoa\\"], \\"nutrition_type\\": \\"cooking\\"}}",
+
+# Step 3 Result — Effect: Nutrition data returned  (Notice how the function value is not blank make sure to do the same in your new ouput)
+"from": "function",
+"value": {{\\"calories\\": 500, \\"nutrients\\": {{\\"PROCNT\\": {{\\"label\\": \\"Protein\\", \\"quantity\\": 40, \\"unit\\": \\"g\\"}}, \\"FAT\\": {{\\"label\\": \\"Fat\\", \\"quantity\\": 15, \\"unit\\": \\"g\\"}}, \\"CHOCDF\\": {{\\"label\\": \\"Carbohydrates\\", \\"quantity\\": 50, \\"unit\\": \\"g\\"}}}}}},
+
+# Step 4 — Cause: All requested data gathered → Effect: Finish with final answer (Notice how the action input is not blank make sure to do the same in your new ouput)
+"from": "assistant",
+"value": "Thought: I have both the brewery list and the nutrition analysis. Time to present the results.\\nAction: Finish\\nAction Input: {{\\"return_type\\": \\"final_answer\\", \\"final_answer\\": \\"Here are New York breweries that offer tours:\\\\n\\\\n- **Brooklyn Brewery** — 79 N 11th St, Brooklyn (Weekend tours)\\\\n- **Other Half Brewing Company** — 195 Centre St, Brooklyn (Daily tours)\\\\n\\\\n**Nutritional analysis** for a chicken, broccoli & quinoa recipe (per serving):\\\\n- Calories: 500 kcal\\\\n- Protein: 40 g\\\\n- Carbohydrates: 50 g\\\\n- Fat: 15 g\\\\n\\\\nHave fun at your beer-tasting party and enjoy the healthy meal!\"}}"
+---
+
+Now generate the complete, error-free conversation in this exact format with every function call containing values.

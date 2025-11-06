@@ -178,3 +178,6 @@ PALADIN builds upon the foundations of
 ToolBench, ToolScan, and ToolReflect,
 unifying them under a framework for runtime robustness and recovery learning.
 
+---
+> *PALADIN demonstrates that execution-level resilience is learnable —  
+> by turning every failure into a training signal.*

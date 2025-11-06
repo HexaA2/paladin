@@ -110,4 +110,71 @@ https://huggingface.co/datasets/E-k-O/PaladinDataSet
 | Fine-tuning | LoRA rank 16, α = 32, bf16 |
 | Dataset Size | 50,000 |
 | Objective | `L = L_SFT + λ L_REC` |
-| Hard Drive | NVIDIA H200 SXM | 
+| Hard Drive | NVIDIA H200 SXM |
+
+---
+## 8. Evaluation Protocol
+Detailed in: [`Eval_Protocol_PALADIN.md`](data/docs/Eval_Protocol_PALADIN.md).* 
+
+All grading used the GPT-5 deterministic setup:
+model = gpt-5-chat-latest
+temperature = 0.0
+seed = 42
+max_tokens = 1000
+response_format = json
+
+---
+
+### **9. Error Taxonomy (ToolScan Aligned)**
+
+| **Category** | **Description** |
+|:-------------|:----------------|
+| Tool Hallucination | Tool not found or invalid |
+| Argument Hallucination | Incorrect or missing parameters |
+| Invalid Tool Invocation | Failed tool call |
+| Partial Execution | Incomplete tool output |
+| Output Hallucination | Fabricated or nonsensical responses |
+| Invalid Intermediate Reasoning | Faulty internal planning |
+| Re-entrant Failures | Infinite or repeated retries |
+
+*These are mapped in [`toolscan_taxonomy_map.json`](./data/toolscan_taxonomy_map.json).*  
+
+---
+
+### **10. Results Summary**
+
+| **Model** | **TSR** | **RR** | **CSR↓** | **ES↑** |
+|:-----------|:-------:|:------:|:---------:|:--------:|
+| ToolBench (base) | 0.62 | 0.34 | 0.25 | 0.71 |
+| ToolReflect | 0.68 | 0.52 | 0.20 | 0.79 |
+| **PALADIN (ours)** | **0.91** | **0.86** | **0.03** | **0.94** |
+
+---
+## 11. Reproducibility Checklist
+- Deterministic GPT-5 evaluation (temperature = 0)
+- Public recovery dictionary and taxonomy maps
+- Open annotation, simulation, and training scripts
+- Example inputs and outputs for verification
+- Hugging Face dataset for full-scale replication
+
+---
+## 12. Citations
+
+@inproceedings{paladin2026,
+  title     = {PALADIN: Self-Correcting Language Model Agents to Cure Tool-Failure Cases},
+  author    = {Anonymous Authors},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2026}
+}
+
+--- 
+## 13. License
+This repository is released under the MIT License for research and academic use.
+
+---
+## 14. Acknowledgements
+
+PALADIN builds upon the foundations of
+ToolBench, ToolScan, and ToolReflect,
+unifying them under a framework for runtime robustness and recovery learning.
+

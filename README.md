@@ -22,8 +22,7 @@ It extends ToolBench-style agents by introducing *structured failure supervision
 ---
 
 ## 2. Repository Structure
-
-PALADIN/
+```
 ├── data/
 │ ├── API_prompts/
 │ │ ├── annotate_clean.txt
@@ -54,3 +53,61 @@ PALADIN/
 │ └── reference_metrics.md
 │
 └── figures/
+```
+---
+
+## 3. Core Components
+
+| Module | Purpose |
+|:--|:--|
+| `annotate_clean.py` | Repairs truncated or invalid ToolBench traces into clean, complete rollouts. |
+| `annotate_recovery.py` | Injects controlled tool errors and synthesizes labeled recovery trajectories. |
+| `simulation.py` | Executes multi-turn deterministic simulations between the agent and tools. |
+| `simulation_with_paladin_error_match.py` | Adds **error-matching logic** that maps unseen failures to known recovery exemplars. |
+| `eval.py` | Grades a full conversation using GPT-5 to compute TSR, RR, CSR, and ES. |
+| `train.py` | Simplified LoRA fine-tuning pipeline for recovery-aware SFT. |
+
+---
+
+## 4. Metrics
+
+| Metric | Definition | Description |
+|:--|:--|:--|
+| **TSR** | `#Successful / #Total` | Overall task completion rate. |
+| **RR** | `#Recovered / #Failures` | Ability to repair after an error. |
+| **CSR** | `1 - (#Hallucinated_Success / #Failures)` | Penalizes silent failures. |
+| **ES** | `1 / Avg_Steps` | Efficiency of reasoning and recovery. |
+
+All metrics are produced by a deterministic GPT-5 grader (`temperature = 0.0`, `seed = 42`) defined in [`GPT-5_API_Config.md`](data/API_prompts/GPT-5_API_Config.md).
+
+---
+
+## 5. Quick Start
+
+### Environment
+```bash
+git clone https://github.com/HexaA2/paladin.git
+cd paladin
+pip install -r requirements.txt
+export OPENAI_API_KEY="your_api_key_here"
+```
+
+---
+## 6. Dataset Construction
+- Base rollouts from ToolBench
+- 7 error categories aligned with ToolScan taxonomy
+- Controlled failure injection via annotate_recovery.py
+- GPT-5-driven recovery synthesis using recovery_dictionary.json
+- 50k+ trajectories combining clean and recovery variants
+
+Huggingface:
+https://huggingface.co/datasets/E-k-O/PaladinDataSet
+---
+## 7. Training Configuration
+| Parameter | Setting |
+|:--|:--|
+| Backbone Models | Gemma-27B, Qwen-14B-Instruct, AM-Thinking-V1, LLaMA-3.1-8B-Instruct |
+| Fine-tuning | LoRA rank 16, α = 32, bf16 |
+| Dataset Size | 50,000 |
+| Objective | `L = L_SFT + λ L_REC` |
+| Hard Drive | NVIDIA H200 SXM | 

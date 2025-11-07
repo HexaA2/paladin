@@ -1,3 +1,8 @@
+---
+layout: default
+title: "PALADIN: Self-Correcting Tool-Using LLMs"
+---
+
 # PALADIN: Self-Correcting Language Model Agents to Cure Tool-Failure Cases
 [![Paper](https://img.shields.io/badge/Paper-ICLR_2026-blue)](https://openreview.net/forum?id=M2AXTAKXbz&referrer=%5BAuthor%20Console%5D(%2Fgroup%3Fid%3DICLR.cc%2F2026%2FConference%2FAuthors%23your-submissions)) 
 [![Dataset](https://img.shields.io/badge/Dataset-HuggingFace-orange)](https://huggingface.co/datasets/SriVatsa123/Gemma_Ready_For_PALADIN)

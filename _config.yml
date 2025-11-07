@@ -3,3 +3,15 @@ description: "Framework and dataset for robust, self-recovering tool-using langu
 theme: jekyll-theme-cayman
 show_downloads: false
 google_analytics: false
+
+include:
+  - google14aacb52f21649ed.html
+
+# 🚫 do NOT let Jekyll process these (prevents Liquid errors)
+exclude:
+  - data/**
+  - src/**
+  - results/**
+  - scripts/**
+  - .github/**
+  - README_assets/**

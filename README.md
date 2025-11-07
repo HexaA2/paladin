@@ -7,14 +7,13 @@
 ---
 
 ### Official Implementation of *“PALADIN: Self-Correcting Language Model Agents to Cure Tool-Failure Cases”*  
-*Under review at the International Conference on Learning Representations (ICLR 2026).*
 
 ---
 
 ## 1. Overview
 
-**PALADIN** is a framework for teaching tool-augmented language models to **detect, diagnose, and recover** from real-time execution failures.  
-It extends ToolBench-style agents by introducing *structured failure supervision*, *taxonomy-guided recovery*, and *deterministic GPT-5 evaluation*.  
+**PALADIN** PALADIN is a framework and dataset for building robust, self-recovering tool-using language model agents.
+It trains on 50K+ failure-injected, recovery-annotated trajectories to equip LLMs with fault tolerance, recovery reasoning, and resilience against real-world API and tool failures — outperforming CRITIC, ToolReflect, and ToolBench baselines by over +13% in Recovery Rate and +10% in Task Success Rate across Gemma, Qwen, and LLaMA backbones.  
 
 > **Key Idea:** PALADIN treats failures as data.  
 > By injecting and labeling diverse tool-level errors, it learns not only to perform tasks but to *self-repair*.

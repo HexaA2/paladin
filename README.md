@@ -14,7 +14,7 @@ title: "PALADIN: Self-Correcting Tool-Using LLMs"
 ### Official Implementation of *“PALADIN: Self-Correcting Language Model Agents to Cure Tool-Failure Cases”*  
 
 ---
-
+ 
 ## 1. Overview
 
 **PALADIN** is a framework and dataset for building robust, self-recovering tool-using language model agents.

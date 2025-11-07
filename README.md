@@ -12,7 +12,7 @@
 
 ## 1. Overview
 
-**PALADIN** PALADIN is a framework and dataset for building robust, self-recovering tool-using language model agents.
+**PALADIN** is a framework and dataset for building robust, self-recovering tool-using language model agents.
 It trains on 50K+ failure-injected, recovery-annotated trajectories to equip LLMs with fault tolerance, recovery reasoning, and resilience against real-world API and tool failures — outperforming CRITIC, ToolReflect, and ToolBench baselines by over +13% in Recovery Rate and +10% in Task Success Rate across Gemma, Qwen, and LLaMA backbones.  
 
 > **Key Idea:** PALADIN treats failures as data.  
